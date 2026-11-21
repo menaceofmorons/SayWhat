@@ -18,10 +18,10 @@ metadata:
 - This file merges with `merge=union`, so dedupe at release.
 
 ### Build & Tooling
-- {lesson} (WS-x.y)
+- `dotnet test` with xunit.v3 on the .NET 10 SDK needs root `global.json` `{"test":{"runner":"Microsoft.Testing.Platform"}}`; VSTest mode fails. (WS-1.1)
 
 ### Conventions
-- {lesson} (WS-x.y)
+- xUnit v3 test projects declare `<Using Include="Xunit" />`; no `xunit3` template is installed, so create test projects by hand. (WS-1.1)
+- New code goes into the existing layer projects; `src/SayWhat.sln` does not change in PH-1. (WS-1.1)
 
 ### Gotchas
-- {lesson} (WS-x.y)
