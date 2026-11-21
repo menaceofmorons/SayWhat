@@ -1,11 +1,9 @@
 using System.Text.RegularExpressions;
-using System.Xml.Linq;
-
 namespace SayWhat.Tests;
 
 public class SolutionIntegrationTests
 {
-    private static readonly string SrcDirectory = FindSrcDirectory();
+    private static string SrcDirectory => RepoPaths.SrcDirectory;
 
     private static readonly string[] ExpectedProjects =
     [
@@ -87,18 +85,7 @@ public class SolutionIntegrationTests
 
     private static IEnumerable<(string Name, string Version)> AllPackageReferences() =>
         ExpectedProjects.SelectMany(project =>
-            XDocument.Load(Path.Combine(SrcDirectory, project, project + ".csproj"))
+            RepoPaths.LoadProject(project)
                 .Descendants("PackageReference")
                 .Select(e => ((string)e.Attribute("Include")!, (string?)e.Attribute("Version") ?? string.Empty)));
-
-    private static string FindSrcDirectory()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "SayWhat.sln")))
-        {
-            directory = directory.Parent;
-        }
-
-        return directory?.FullName ?? throw new InvalidOperationException("SayWhat.sln not found");
-    }
 }

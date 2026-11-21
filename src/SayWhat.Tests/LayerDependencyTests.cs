@@ -1,11 +1,7 @@
-using System.Xml.Linq;
-
 namespace SayWhat.Tests;
 
 public class LayerDependencyTests
 {
-    private static readonly string SrcDirectory = FindSrcDirectory();
-
     [Fact]
     public void Core_ReferencesNoOtherProject()
     {
@@ -74,18 +70,7 @@ public class LayerDependencyTests
         Items(project, "PackageReference").Order(StringComparer.OrdinalIgnoreCase).ToArray();
 
     private static IEnumerable<string> Items(string project, string element) =>
-        XDocument.Load(Path.Combine(SrcDirectory, project, project + ".csproj"))
+        RepoPaths.LoadProject(project)
             .Descendants(element)
             .Select(e => (string)e.Attribute("Include")!);
-
-    private static string FindSrcDirectory()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "SayWhat.sln")))
-        {
-            directory = directory.Parent;
-        }
-
-        return directory?.FullName ?? throw new InvalidOperationException("SayWhat.sln not found");
-    }
 }
