@@ -11,3 +11,15 @@
 node_modules/
 test-results/
 # <<< devframework <<<
+
+# >>> project (SayWhat) >>>
+# Local runtime files (state and reference databases)
+*.db
+*.db-wal
+*.db-shm
+# .NET build output
+bin/
+obj/
+# Packaging output (#PKGS)
+Packaging/out/
+# <<< project <<<
