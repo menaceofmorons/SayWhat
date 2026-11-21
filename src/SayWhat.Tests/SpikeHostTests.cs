@@ -25,6 +25,10 @@ public class SpikeHostTests
 
         using var process = Process.Start(startInfo)!;
         var exited = process.WaitForExit(TimeSpan.FromSeconds(30));
+        if (!exited)
+        {
+            process.Kill(entireProcessTree: true);
+        }
 
         Assert.True(exited);
         Assert.Equal(0, process.ExitCode);
