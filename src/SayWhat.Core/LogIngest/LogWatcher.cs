@@ -1,3 +1,5 @@
+using System.Text.RegularExpressions;
+
 namespace SayWhat.Core.LogIngest;
 
 public sealed record LiveChannel(
@@ -15,7 +17,7 @@ public sealed record LogWatcherOptions(
     TimeSpan? PollInterval = null,
     bool UseFileNotifications = true);
 
-public sealed class LogWatcher : IDisposable
+public sealed partial class LogWatcher : IDisposable
 {
     public static readonly TimeSpan DefaultPollInterval = TimeSpan.FromMilliseconds(250);
 
@@ -123,13 +125,8 @@ public sealed class LogWatcher : IDisposable
             return entries;
         }
 
-        foreach (var path in Directory.EnumerateFiles(folder.Path, "*.txt"))
+        foreach (var path in NewestPerNameKey(Directory.EnumerateFiles(folder.Path, "*.txt").Where(p => !IsSayWhatFile(p))))
         {
-            if (IsSayWhatFile(path))
-            {
-                continue;
-            }
-
             var header = TryReadHeader(path);
             if (header is not null)
             {
@@ -142,6 +139,35 @@ public sealed class LogWatcher : IDisposable
             .Select(g => g.OrderByDescending(SortKey).First())
             .ToList();
     }
+
+    private static IEnumerable<string> NewestPerNameKey(IEnumerable<string> paths)
+    {
+        var newest = new Dictionary<(string Channel, string Pilot), (string Stamp, string Path)>();
+        foreach (var path in paths)
+        {
+            var match = FileNamePattern().Match(Path.GetFileName(path));
+            if (!match.Success)
+            {
+                yield return path;
+                continue;
+            }
+
+            var key = (match.Groups["channel"].Value.ToUpperInvariant(), match.Groups["id"].Value);
+            var stamp = match.Groups["date"].Value + match.Groups["time"].Value;
+            if (!newest.TryGetValue(key, out var current) || string.CompareOrdinal(stamp, current.Stamp) > 0)
+            {
+                newest[key] = (stamp, path);
+            }
+        }
+
+        foreach (var (_, path) in newest.Values)
+        {
+            yield return path;
+        }
+    }
+
+    [GeneratedRegex(@"^(?<channel>.+)_(?<date>\d{8})_(?<time>\d{6})(?:_(?<id>\d+))?\.txt$")]
+    private static partial Regex FileNamePattern();
 
     private bool IsSayWhatFile(string path) =>
         options.SayWhatLogPrefix.Length > 0
