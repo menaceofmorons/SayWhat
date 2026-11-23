@@ -20,6 +20,8 @@ metadata:
 ### Build & Tooling
 - `dotnet test` with xunit.v3 on the .NET 10 SDK needs root `global.json` `{"test":{"runner":"Microsoft.Testing.Platform"}}`; VSTest mode fails. (WS-1.1)
 - `dotnet format whitespace --verify-no-changes` on the solution can exceed 2 minutes in a OneDrive worktree; run it in the background. (WS-1.4)
+- After writing files by hand, run `dotnet format whitespace` (not `--verify-no-changes`) to apply the repo line-ending style. (WS-1.4)
+- Opt-in live tests use xunit.v3 `Assert.SkipUnless(condition, reason)` with the git-ignored `src/SayWhat.Tests/.model-cache/` via `ModelTestCache.cs`. (WS-1.4)
 
 ### Conventions
 - xUnit v3 test projects declare `<Using Include="Xunit" />`; no `xunit3` template is installed, so create test projects by hand. (WS-1.1)
@@ -27,3 +29,4 @@ metadata:
 
 ### Gotchas
 - xUnit v3 reuses pool threads: assert "runs off the calling thread" with a blocking fake and an incomplete task, not thread ids. (WS-1.4)
+- Xenova Opus-MT `vocab.json` ids are per pair and differ from spm ids; map by piece string (`SentencePieceTokenizer.Vocabulary` gives piece → spm id). (WS-1.4)
