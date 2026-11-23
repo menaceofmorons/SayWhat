@@ -47,4 +47,5 @@ metadata:
 ### Dependencies
 - Inspect a NuGet package without a build: download `https://api.nuget.org/v3-flatcontainer/{id}/{version}/{id}.{version}.nupkg` and open it as a zip. (WS-1.3)
 - `Microsoft.Data.Sqlite` 10.0.x depends on `SQLitePCLRaw` 2.1.13, not the 3.0.x line; pin only `Microsoft.Data.Sqlite` and let the bundle resolve. (WS-1.5)
+- Large name sets (~60k): scan with `HashSet<string>.GetAlternateLookup<ReadOnlySpan<char>>()` span lookups, not a regex alternation. (WS-1.5)
 - Panlingo fastText: `Predict(text, k, 0f)` with k above the label count returns every label, which allows a script-restricted top-1. (WS-1.3)
