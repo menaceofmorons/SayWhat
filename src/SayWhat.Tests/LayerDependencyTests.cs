@@ -45,11 +45,18 @@ public class LayerDependencyTests
     [Theory]
     [InlineData("SayWhat.Core")]
     [InlineData("SayWhat.Engines")]
-    [InlineData("SayWhat.Platform.Windows")]
     [InlineData("SayWhat.Spike")]
     public void SourceProject_HasNoPackageReference(string project)
     {
         Assert.Empty(PackageReferences(project));
+    }
+
+    [Fact]
+    public void Platform_UsesOnlyTheClearedFastTextBinding()
+    {
+        Assert.Equal(
+            ["Panlingo.LanguageIdentification.FastText", "Panlingo.LanguageIdentification.FastText.Native"],
+            PackageReferences("SayWhat.Platform.Windows"));
     }
 
     [Fact]
