@@ -25,6 +25,15 @@ public static class LanguageDetection
         ILanguageDetector detector,
         bool translationEnabled,
         IEnumerable<string>? shipNames = null,
+        double confidenceCutoff = DefaultConfidenceCutoff) =>
+        Run(text, targetLanguage, detector, translationEnabled, new ShipNameMatcher(shipNames), confidenceCutoff);
+
+    public static DetectionOutcome Run(
+        string? text,
+        string targetLanguage,
+        ILanguageDetector detector,
+        bool translationEnabled,
+        ShipNameMatcher shipNameMatcher,
         double confidenceCutoff = DefaultConfidenceCutoff)
     {
         if (!translationEnabled)
@@ -32,7 +41,7 @@ public static class LanguageDetection
             return DetectionOutcome.NotRun;
         }
 
-        var setAside = SetAside.Apply(text, shipNames);
+        var setAside = SetAside.Apply(text, shipNameMatcher);
         if (setAside.HasNoLetters)
         {
             return DetectionOutcome.Unknown;
