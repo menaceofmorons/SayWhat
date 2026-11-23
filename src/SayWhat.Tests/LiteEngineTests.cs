@@ -200,6 +200,41 @@ public sealed class LiteEngineTests : IDisposable
     }
 
     [Fact]
+    public async Task Translate_maps_an_http_client_timeout_during_route_resolution_to_timeout()
+    {
+        var client = new HttpClient(new ThrowingHandler(() => new TaskCanceledException("timed out")));
+        var engine = Engine(new XenovaModelCatalogue(client));
+
+        var result = await engine.Translate("hi", "de", "en", default);
+
+        Assert.Equal(EngineErrorCategory.Timeout, result.Error!.Category);
+    }
+
+    [Fact]
+    public async Task Translate_bounds_route_resolution_by_the_request_timeout()
+    {
+        var client = new HttpClient(new HangingHandler());
+        var engine = Engine(new XenovaModelCatalogue(client), TimeSpan.FromMilliseconds(100));
+
+        var result = await engine.Translate("hi", "de", "en", default);
+
+        Assert.Equal(EngineErrorCategory.Timeout, result.Error!.Category);
+    }
+
+    [Fact]
+    public async Task Translate_honours_caller_cancellation_during_route_resolution()
+    {
+        using var cts = new CancellationTokenSource();
+        var client = new HttpClient(new HangingHandler());
+        var engine = Engine(new XenovaModelCatalogue(client));
+
+        var pending = engine.Translate("hi", "de", "en", cts.Token);
+        await cts.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pending);
+    }
+
+    [Fact]
     public async Task Translate_honours_caller_cancellation()
     {
         Install("de-en");
@@ -477,6 +512,21 @@ public sealed class LiteEngineTests : IDisposable
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
             Task.FromResult(new HttpResponseMessage(status) { Content = new StringContent(body, Encoding.UTF8, "application/json") });
+    }
+
+    private sealed class ThrowingHandler(Func<Exception> exception) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            throw exception();
+    }
+
+    private sealed class HangingHandler : HttpMessageHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            return new HttpResponseMessage(HttpStatusCode.OK);
+        }
     }
 
     private sealed class RoutingHandler(Func<string, (HttpStatusCode Status, string Body)> route) : HttpMessageHandler
