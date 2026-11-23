@@ -30,3 +30,5 @@ metadata:
 ### Gotchas
 - xUnit v3 reuses pool threads: assert "runs off the calling thread" with a blocking fake and an incomplete task, not thread ids. (WS-1.4)
 - Xenova Opus-MT `vocab.json` ids are per pair and differ from spm ids; map by piece string (`SentencePieceTokenizer.Vocabulary` gives piece → spm id). (WS-1.4)
+- Xenova merged decoder: step one needs `use_cache_branch=false` with zero-length past tensors; later steps take only `present.*.decoder.*` and keep `*.encoder.*` from step one; start token `<pad>` is excluded from argmax. (WS-1.4)
+- ONNX Runtime cache dims (heads, head size) come from `InferenceSession.InputMetadata` of `past_key_values.*`. (WS-1.4)
