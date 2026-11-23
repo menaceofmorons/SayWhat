@@ -42,12 +42,16 @@ public class LayerDependencyTests
             ProjectReferences("SayWhat.Tests"));
     }
 
-    [Theory]
-    [InlineData("SayWhat.Core")]
-    [InlineData("SayWhat.Spike")]
-    public void SourceProject_HasNoPackageReference(string project)
+    [Fact]
+    public void Spike_HasNoPackageReference()
     {
-        Assert.Empty(PackageReferences(project));
+        Assert.Empty(PackageReferences("SayWhat.Spike"));
+    }
+
+    [Fact]
+    public void Core_UsesOnlyTheClearedSqlitePackage()
+    {
+        Assert.Equal(["Microsoft.Data.Sqlite"], PackageReferences("SayWhat.Core"));
     }
 
     [Fact]
