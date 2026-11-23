@@ -22,4 +22,6 @@ bin/
 obj/
 # Packaging output (#PKGS)
 Packaging/out/
+# Local model test cache (A2)
+src/SayWhat.Tests/.model-cache/
 # <<< project <<<
