@@ -256,4 +256,80 @@ public class ModelHostTests
 
         Assert.Empty(f.Host.LoadedKeys);
     }
+
+    [Fact]
+    public async Task Failed_chain_pin_still_disposes_models_it_evicted()
+    {
+        using var f = new Fixture(150);
+        f.Register("a", 100);
+        f.Register("b", 100);
+        await f.UseAsync("a");
+
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => f.Host.AcquireChainAsync(["b", "missing"], CancellationToken.None));
+
+        Assert.True(f.Sessions["a"].Disposed);
+    }
+
+    [Fact]
+    public async Task Throwing_session_dispose_does_not_stop_other_unloads()
+    {
+        using var f = new Fixture();
+        f.Host.Register("bad", Mb, _ => Task.FromResult(new LoadedModel(new ThrowingSession())));
+        f.Register("good", 1);
+        await f.UseAsync("bad");
+        await f.UseAsync("good");
+
+        f.Clock.Advance(TimeSpan.FromHours(1));
+        f.Host.UnloadIdle();
+
+        Assert.Empty(f.Host.LoadedKeys);
+        Assert.True(f.Sessions["good"].Disposed);
+    }
+
+    [Fact]
+    public async Task Dispose_frees_a_session_that_finishes_loading_afterwards()
+    {
+        var f = new Fixture();
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        f.Register("a", 100, gate);
+        var pending = f.Host.AcquireAsync("a", CancellationToken.None);
+        await Task.Delay(50);
+
+        f.Dispose();
+        gate.SetResult();
+
+        await Eventually(() => f.Sessions.TryGetValue("a", out var session) && session.Disposed);
+        try
+        {
+            (await pending).Dispose();
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+    }
+
+    [Fact]
+    public async Task Acquire_after_dispose_throws()
+    {
+        var f = new Fixture();
+        f.Register("a", 100);
+        f.Dispose();
+
+        await Assert.ThrowsAsync<ObjectDisposedException>(() => f.Host.AcquireAsync("a", CancellationToken.None));
+    }
+
+    private sealed class ThrowingSession : IDisposable
+    {
+        public void Dispose() => throw new InvalidOperationException("dispose failed");
+    }
+
+    private static async Task Eventually(Func<bool> condition)
+    {
+        for (var attempt = 0; attempt < 100 && !condition(); attempt++)
+        {
+            await Task.Delay(20);
+        }
+
+        Assert.True(condition());
+    }
 }
