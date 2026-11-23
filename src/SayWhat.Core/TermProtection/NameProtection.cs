@@ -77,7 +77,7 @@ internal static class NameProtection
         var i = 0;
         while (i < segment.Length)
         {
-            var length = i > 0 && IsWordChar(segment[i - 1]) ? 0 : LongestMatchAt(segment, i, lookup, longest);
+            var length = i > 0 && IsBoundaryBlocker(segment[i - 1]) ? 0 : LongestMatchAt(segment, i, lookup, longest);
             if (length > 0)
             {
                 builder.Append(addItem(segment.Slice(i, length).ToString()));
@@ -96,7 +96,7 @@ internal static class NameProtection
         for (var length = Math.Min(longest, segment.Length - start); length > 0; length--)
         {
             var end = start + length;
-            if (end < segment.Length && IsWordChar(segment[end]))
+            if (end < segment.Length && IsBoundaryBlocker(segment[end]))
             {
                 continue;
             }
@@ -109,6 +109,10 @@ internal static class NameProtection
 
         return 0;
     }
+
+    private static bool IsBoundaryBlocker(char c) => IsWordChar(c) && !IsUnspacedScript(c);
+
+    private static bool IsUnspacedScript(char c) => c is >= '぀' and <= 'ヿ' or >= '一' and <= '鿿';
 
     private static bool IsWordChar(char c) =>
         char.IsLetterOrDigit(c)
@@ -123,17 +127,19 @@ internal static class NameProtection
         private readonly ConcurrentDictionary<string, ShipIndex?> ships = new();
         private readonly Lazy<IReadOnlyList<string>> clientLanguages;
         private readonly Lazy<HashSet<string>> systemNames;
+        private readonly Lazy<int> longestSystemName;
 
         public NameIndex(ReferenceDatabase reference)
         {
             this.reference = reference;
             clientLanguages = new Lazy<IReadOnlyList<string>>(reference.ClientLanguages);
             systemNames = new Lazy<HashSet<string>>(BuildSystemNames);
+            longestSystemName = new Lazy<int>(() => SystemNames.Count == 0 ? 0 : SystemNames.Max(name => name.Length));
         }
 
         public HashSet<string> SystemNames => systemNames.Value;
 
-        public int LongestSystemName => SystemNames.Count == 0 ? 0 : SystemNames.Max(name => name.Length);
+        public int LongestSystemName => longestSystemName.Value;
 
         public bool IsClientLanguage(string language) => clientLanguages.Value.Contains(language, StringComparer.Ordinal);
 
