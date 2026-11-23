@@ -20,6 +20,7 @@ public class SolutionIntegrationTests
         ["xunit.v3"] = "4.0.3",
         ["xunit.runner.visualstudio"] = "4.0.1",
         ["Microsoft.ML.Tokenizers"] = "3.0.0",
+        ["Microsoft.ML.OnnxRuntime"] = "1.32.0",
     };
 
     private static readonly string[] RejectedPackagePrefixes =
