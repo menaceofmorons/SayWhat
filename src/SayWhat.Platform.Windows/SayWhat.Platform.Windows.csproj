@@ -4,6 +4,11 @@
     <ProjectReference Include="..\SayWhat.Core\SayWhat.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Panlingo.LanguageIdentification.FastText" Version="0.8.1" />
+    <PackageReference Include="Panlingo.LanguageIdentification.FastText.Native" Version="0.8.1" />
+  </ItemGroup>
+
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
