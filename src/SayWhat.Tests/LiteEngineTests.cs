@@ -284,11 +284,11 @@ public sealed class LiteEngineTests : IDisposable
     [InlineData("de-en,en-ru", "de", "ru", "Das Wetter ist heute sehr schön.", new[] { "погод" })]
     public async Task Live_translation_for_direct_and_pivot_pairs(string pairs, string source, string target, string line, string[] expected)
     {
-        var liveRoot = await LiveFolderAsync(pairs.Split(','));
-        Assert.SkipUnless(liveRoot is not null, "model files not in the local test cache");
+        using var live = await LiveModelFolder.CreateAsync("saywhat-lite-live-", pairs.Split(','));
+        Assert.SkipUnless(live is not null, "model files not in the local test cache");
         using var host = new ModelHost(TimeSpan.FromMinutes(10), 500L * 1024 * 1024, TimeProvider.System);
         var engine = new LiteEngine(
-            new ModelFolder(liveRoot, LiteEngine.RequiredFiles),
+            new ModelFolder(live.Root, LiteEngine.RequiredFiles),
             catalogue,
             () => host,
             LitePairTranslator.Load,
@@ -302,14 +302,6 @@ public sealed class LiteEngineTests : IDisposable
         if (pairs.Contains(','))
         {
             Assert.Equal(2, host.LoadedKeys.Count);
-        }
-
-        try
-        {
-            Directory.Delete(liveRoot, recursive: true);
-        }
-        catch (IOException)
-        {
         }
     }
 
@@ -398,6 +390,35 @@ public sealed class LiteEngineTests : IDisposable
     private static string ListingJson(long size) =>
         "{\"siblings\":[" + string.Join(",", LiteEngine.RequiredFiles.Select(f => $"{{\"rfilename\":\"{f}\",\"size\":{size}}}")) + "]}";
 
+    [Theory]
+    [InlineData("../evil", "en")]
+    [InlineData("de", "en/../..")]
+    [InlineData("d e", "en")]
+    [InlineData("", "en")]
+    [InlineData("de\\x", "en")]
+    public async Task Invalid_language_codes_are_no_model_and_never_reach_the_catalogue(string source, string target)
+    {
+        var engine = Engine(new XenovaModelCatalogue(new HttpClient(new ThrowingHandler(() => new InvalidOperationException("reached catalogue")))));
+
+        Assert.IsType<PrepareResult.NoModel>(await engine.Prepare(source, target, default));
+        Assert.Equal(EngineErrorCategory.NoModel, (await engine.Translate("hi", source, target, default)).Error!.Category);
+    }
+
+    [Fact]
+    public async Task Catalogue_escapes_language_codes_in_the_request_url()
+    {
+        string? requested = null;
+        var client = new HttpClient(new RoutingHandler(url =>
+        {
+            requested = url;
+            return (HttpStatusCode.NotFound, "");
+        }));
+
+        await new XenovaModelCatalogue(client).FindSizeAsync(new LanguagePair("a/b", "c?d"), default);
+
+        Assert.Contains("opus-mt-a%2Fb-c%3Fd", requested);
+    }
+
     [Fact]
     public async Task Translate_russian_to_korean_has_no_route()
     {
@@ -406,28 +427,6 @@ public sealed class LiteEngineTests : IDisposable
         var result = await engine.Translate("Привет", "ru", "ko", default);
 
         Assert.Equal(EngineErrorCategory.NoModel, result.Error!.Category);
-    }
-
-    private static async Task<string?> LiveFolderAsync(string[] pairs)
-    {
-        var liveRoot = Path.Combine(Path.GetTempPath(), "saywhat-lite-live-" + Guid.NewGuid().ToString("N"));
-        foreach (var pair in pairs)
-        {
-            var files = await ModelTestCache.TryGetAllAsync(pair, LiteEngine.RequiredFiles.ToArray());
-            if (files is null)
-            {
-                return null;
-            }
-
-            foreach (var (name, path) in files)
-            {
-                var target = Path.Combine(liveRoot, "lite", pair, name);
-                Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-                File.Copy(path, target);
-            }
-        }
-
-        return liveRoot;
     }
 
     private void Install(string pair)

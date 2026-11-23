@@ -81,12 +81,12 @@ public sealed class LiteIntegrationTests : IDisposable
     public async Task Live_direct_pivot_and_no_route_pairs_through_the_interface()
     {
         Assert.SkipUnless(Environment.GetEnvironmentVariable("SAYWHAT_FETCH_TEST_MODELS") == "1", "live integration checks are opt-in");
-        var liveRoot = await LiveFolderAsync(["de-en", "en-ru"]);
-        Assert.SkipUnless(liveRoot is not null, "model files not in the local test cache");
+        using var live = await LiveModelFolder.CreateAsync("saywhat-lite-integration-live-", ["de-en", "en-ru"]);
+        Assert.SkipUnless(live is not null, "model files not in the local test cache");
         using var client = new HttpClient();
         using var host = new ModelHost(TimeSpan.FromMinutes(10), 500L * 1024 * 1024, TimeProvider.System);
         IEngine engine = new LiteEngine(
-            new ModelFolder(liveRoot, LiteEngine.RequiredFiles),
+            new ModelFolder(live.Root, LiteEngine.RequiredFiles),
             new XenovaModelCatalogue(client),
             () => host,
             LitePairTranslator.Load,
@@ -104,15 +104,6 @@ public sealed class LiteIntegrationTests : IDisposable
         Assert.Equal(["lite/de-en", "lite/en-ru"], host.LoadedKeys.Order().ToArray());
         Assert.Equal(EngineErrorCategory.NoModel, noRoute.Error!.Category);
         Assert.IsType<PrepareResult.NoModel>(prepareNoRoute);
-
-        try
-        {
-            host.Dispose();
-            Directory.Delete(liveRoot, recursive: true);
-        }
-        catch (IOException)
-        {
-        }
     }
 
     private static XenovaModelCatalogue PublishedCatalogue(long size = 10)
@@ -146,28 +137,6 @@ public sealed class LiteIntegrationTests : IDisposable
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             File.WriteAllText(path, "x");
         }
-    }
-
-    private static async Task<string?> LiveFolderAsync(string[] pairs)
-    {
-        var liveRoot = Path.Combine(Path.GetTempPath(), "saywhat-lite-integration-live-" + Guid.NewGuid().ToString("N"));
-        foreach (var pair in pairs)
-        {
-            var files = await ModelTestCache.TryGetAllAsync(pair, LiteEngine.RequiredFiles.ToArray());
-            if (files is null)
-            {
-                return null;
-            }
-
-            foreach (var (name, path) in files)
-            {
-                var target = Path.Combine(liveRoot, "lite", pair, name);
-                Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-                File.Copy(path, target);
-            }
-        }
-
-        return liveRoot;
     }
 
     private sealed class StubTranslator(string pair) : ILitePairTranslator
