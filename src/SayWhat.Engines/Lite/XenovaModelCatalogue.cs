@@ -12,7 +12,7 @@ public sealed class XenovaModelCatalogue(HttpClient client) : ILiteModelCatalogu
     {
         using var response = await client.GetAsync(
             string.Format(ListingUrl, pair.Source, pair.Target), cancellation).ConfigureAwait(false);
-        if (response.StatusCode == HttpStatusCode.NotFound)
+        if (response.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Unauthorized)
         {
             return null;
         }
