@@ -9,7 +9,6 @@ public class LayerDependencyTests
     }
 
     [Theory]
-    [InlineData("SayWhat.Engines")]
     [InlineData("SayWhat.Platform.Windows")]
     public void Layer_ReferencesOnlyCore(string project)
     {
@@ -26,7 +25,6 @@ public class LayerDependencyTests
 
     [Theory]
     [InlineData("SayWhat.Core")]
-    [InlineData("SayWhat.Engines")]
     [InlineData("SayWhat.Platform.Windows")]
     [InlineData("SayWhat.Spike")]
     public void NoSourceProject_ReferencesSpike(string project)
@@ -44,12 +42,17 @@ public class LayerDependencyTests
 
     [Theory]
     [InlineData("SayWhat.Core")]
-    [InlineData("SayWhat.Engines")]
     [InlineData("SayWhat.Platform.Windows")]
     [InlineData("SayWhat.Spike")]
     public void SourceProject_HasNoPackageReference(string project)
     {
         Assert.Empty(PackageReferences(project));
+    }
+
+    [Fact]
+    public void Engines_UseOnlyTheClearedTokeniser()
+    {
+        Assert.Equal(["Microsoft.ML.Tokenizers"], PackageReferences("SayWhat.Engines"));
     }
 
     [Fact]
