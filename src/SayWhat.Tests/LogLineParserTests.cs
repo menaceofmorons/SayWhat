@@ -52,7 +52,7 @@ public class LogLineParserTests
     [Fact]
     public void HeaderOnlyLog_YieldsNoLinesAndNoWarning()
     {
-        var result = Run(["﻿" + EnglishHeader[0], .. EnglishHeader[1..]]);
+        var result = Run(["\uFEFF" + EnglishHeader[0], .. EnglishHeader[1..]]);
 
         Assert.Empty(result.Lines);
         Assert.Empty(result.Warnings);
@@ -62,7 +62,7 @@ public class LogLineParserTests
     [InlineData("[ 2026.11.23 10:00:01 ] Other Pilot > hello")]
     [InlineData("[2026.11.23 10:00:01] Other Pilot > hello")]
     [InlineData("[  2026.11.23   10:00:01  ]   Other Pilot   >   hello")]
-    [InlineData("﻿[ 2026.11.23 10:00:01 ] Other Pilot > hello")]
+    [InlineData("\uFEFF[ 2026.11.23 10:00:01 ] Other Pilot > hello")]
     public void SpacingVariants_ParseToSameFields(string raw)
     {
         var line = Assert.Single(Run([.. EnglishHeader, raw]).Lines);
@@ -155,6 +155,21 @@ public class LogLineParserTests
         Assert.Equal(ParseWarningKind.HeaderUnreadable, warning.Kind);
         Assert.Null(warning.LineId);
         Assert.Equal("[ 2026.11.23 10:00:01 ] A > b", Assert.Single(result.Lines, l => l.Text.StartsWith('[')).Text);
+    }
+
+    [Fact]
+    public void UnclosedHeader_WarnsOnceAndLaterLinesPassThrough()
+    {
+        var chat = Enumerable.Range(0, 20).Select(i => $"[ 2026.11.23 10:00:{i:00} ] A > b{i}").ToList();
+        var parser = new LogLineParser();
+
+        var result = Run([.. EnglishHeader[..5], .. chat], parser);
+
+        Assert.Null(parser.Header);
+        var warning = Assert.Single(result.Warnings);
+        Assert.Equal(ParseWarningKind.HeaderUnreadable, warning.Kind);
+        Assert.NotEmpty(result.Lines);
+        Assert.Equal(chat[^1], result.Lines[^1].Text);
     }
 
     [Fact]

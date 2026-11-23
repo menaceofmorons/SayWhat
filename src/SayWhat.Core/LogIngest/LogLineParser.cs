@@ -7,8 +7,9 @@ public sealed partial class LogLineParser
 {
     public const string SeedSystemSender = "EVE System";
 
-    private const char ByteOrderMarkChar = '﻿';
+    private const char ByteOrderMarkChar = '\uFEFF';
     private const int HeaderFieldCount = 4;
+    private const int MaxHeaderLines = HeaderFieldCount + 4;
     private static readonly string[] TimestampFormats = ["yyyy.MM.dd HH:mm:ss"];
 
     private readonly HashSet<string> systemSenders;
@@ -85,6 +86,12 @@ public sealed partial class LogLineParser
         if (headerLines.Count > 1 && isSeparator)
         {
             CompleteHeader(warnings);
+            return;
+        }
+
+        if (headerLines.Count >= MaxHeaderLines)
+        {
+            FailHeader(warnings);
         }
     }
 
