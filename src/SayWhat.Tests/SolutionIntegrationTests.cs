@@ -23,6 +23,7 @@ public class SolutionIntegrationTests
         ["Panlingo.LanguageIdentification.FastText.Native"] = "0.8.1",
         ["Microsoft.ML.Tokenizers"] = "3.0.0",
         ["Microsoft.ML.OnnxRuntime"] = "1.32.0",
+        ["Microsoft.Data.Sqlite"] = "10.0.15",
     };
 
     private static readonly string[] RejectedPackagePrefixes =

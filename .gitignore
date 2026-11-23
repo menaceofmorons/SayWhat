@@ -24,4 +24,6 @@ obj/
 Packaging/out/
 # Local model test cache (A2)
 src/SayWhat.Tests/.model-cache/
+# Local SDE test cache
+src/SayWhat.Tests/.sde-cache/
 # <<< project <<<
