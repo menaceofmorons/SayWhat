@@ -20,6 +20,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Include="Fixtures\*.txt" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\SayWhat.Core\SayWhat.Core.csproj" />
     <ProjectReference Include="..\SayWhat.Engines\SayWhat.Engines.csproj" />
     <ProjectReference Include="..\SayWhat.Platform.Windows\SayWhat.Platform.Windows.csproj" />
