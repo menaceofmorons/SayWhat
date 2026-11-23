@@ -11,6 +11,7 @@ public sealed class ModelHost : IDisposable
     private readonly TimeSpan idleTimeout;
     private readonly long memoryCeilingBytes;
     private readonly ITimer sweepTimer;
+    private bool disposed;
 
     public ModelHost(TimeSpan idleTimeout, long memoryCeilingBytes, TimeProvider clock)
     {
@@ -66,15 +67,22 @@ public sealed class ModelHost : IDisposable
         var toUnload = new List<Entry>();
         try
         {
-            lock (gate)
+            try
             {
-                foreach (var key in keys)
+                lock (gate)
                 {
-                    pinned.Add(Pin(key, toUnload));
+                    ObjectDisposedException.ThrowIf(disposed, this);
+                    foreach (var key in keys)
+                    {
+                        pinned.Add(Pin(key, toUnload));
+                    }
                 }
             }
+            finally
+            {
+                DisposeAll(toUnload);
+            }
 
-            DisposeAll(toUnload);
             var leases = new List<ModelLease>();
             foreach (var entry in pinned)
             {
@@ -120,6 +128,7 @@ public sealed class ModelHost : IDisposable
         List<Entry> all;
         lock (gate)
         {
+            disposed = true;
             all = entries.Values.ToList();
             entries.Clear();
         }
@@ -203,10 +212,32 @@ public sealed class ModelHost : IDisposable
     {
         foreach (var entry in unloaded)
         {
-            if (entry.Loading.IsCompletedSuccessfully && entry.Loading.Result.Session is IDisposable disposable)
+            if (entry.Loading.IsCompleted)
+            {
+                DisposeSession(entry.Loading);
+            }
+            else
+            {
+                entry.Loading.ContinueWith(
+                    DisposeSession,
+                    CancellationToken.None,
+                    TaskContinuationOptions.OnlyOnRanToCompletion,
+                    TaskScheduler.Default);
+            }
+        }
+    }
+
+    private static void DisposeSession(Task<LoadedModel> loading)
+    {
+        try
+        {
+            if (loading.IsCompletedSuccessfully && loading.Result.Session is IDisposable disposable)
             {
                 disposable.Dispose();
             }
+        }
+        catch (Exception)
+        {
         }
     }
 
