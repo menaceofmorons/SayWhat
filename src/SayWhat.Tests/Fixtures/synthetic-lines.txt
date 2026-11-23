@@ -1,0 +1,105 @@
+en	short	Vargur primary
+en	short	Rifter Rifter
+en	short	gf all
+en	short	on grid
+en	short	Hello jita
+en	sentence	We are forming a fleet at the station in ten minutes, bring your own ships and logistics.
+en	sentence	Does anyone know where I can buy a cheap frigate near here?
+en	sentence	The gate camp is gone, you can jump through now without any trouble.
+de	short	Danke dir
+de	short	Alle bereit
+de	short	Guten Morgen
+de	short	nicht jetzt
+de	sentence	Wir treffen uns in zehn Minuten an der Station und fliegen dann gemeinsam zum Sprungtor.
+de	sentence	Hat jemand eine Ahnung, wo ich hier ein günstiges Schiff kaufen kann?
+de	sentence	Das Lager ist leer, ihr könnt jetzt ohne Probleme durch das Tor springen.
+fr	short	Merci beaucoup
+fr	short	Je suis là
+fr	short	Bonne chance
+fr	short	pas maintenant
+fr	sentence	Nous nous retrouvons dans dix minutes à la station puis nous partons ensemble vers la porte.
+fr	sentence	Est-ce que quelqu'un sait où je peux acheter un vaisseau pas cher par ici ?
+fr	sentence	Le blocus est terminé, vous pouvez maintenant sauter sans aucun problème.
+es	short	Muchas gracias
+es	short	Estoy aquí
+es	short	Buena suerte
+es	short	ahora no
+es	sentence	Nos vemos en diez minutos en la estación y luego volamos juntos hacia la puerta de salto.
+es	sentence	¿Alguien sabe dónde puedo comprar una nave barata por aquí?
+es	sentence	El bloqueo ya terminó, ahora pueden saltar sin ningún problema.
+ru	short	Спасибо
+ru	short	Все готовы
+ru	short	Доброе утро
+ru	short	не сейчас
+ru	sentence	Встречаемся через десять минут на станции и потом вместе летим к воротам.
+ru	sentence	Кто-нибудь знает, где здесь можно купить недорогой корабль?
+ru	sentence	Блокпост пропал, теперь можно спокойно прыгать через ворота.
+ja	short	ありがとう
+ja	short	了解です
+ja	short	おはよう
+ja	short	今は無理
+ja	sentence	十分後に駅で集合して、みんなで一緒にゲートへ向かいます。
+ja	sentence	この近くで安い船を買える場所を知っている人はいますか。
+ja	sentence	封鎖は終わったので、もう問題なくジャンプできます。
+ko	short	감사합니다
+ko	short	준비 완료
+ko	short	좋은 아침
+ko	short	지금은 안돼
+ko	sentence	십 분 뒤에 정거장에서 만나서 함께 게이트로 이동합니다.
+ko	sentence	이 근처에서 싼 함선을 살 수 있는 곳을 아는 사람 있나요?
+ko	sentence	봉쇄가 끝났으니 이제 문제없이 점프할 수 있습니다.
+zh	short	好的
+zh	short	谢谢
+zh	short	准备好了
+zh	short	现在不行
+zh	sentence	十分钟后在空间站集合，然后一起前往星门。
+zh	sentence	有人知道这附近哪里可以买到便宜的飞船吗？
+zh	sentence	封锁已经结束，现在可以放心跳跃了。
+zh-hans	variant	这个舰队在哪里
+zh-hans	variant	我们需要更多的人手
+zh-hans	variant	请问有人要买吗
+zh-hans	variant	好的谢谢
+zh-hans	variant	准备跳跃
+zh-hans	variant	谁有空来帮忙
+zh-hant	variant	這個艦隊在哪裡
+zh-hant	variant	我們需要更多的人手
+zh-hant	variant	請問有人要買嗎
+zh-hant	variant	好的謝謝
+zh-hant	variant	準備跳躍
+zh-hant	variant	誰有空來幫忙
+en	ship	Vargur primary
+en	ship	Rifter Rifter Rifter
+en	ship	Megathron on grid
+en	ship	Hurricane and Raven incoming
+en	ship	bring a Tristan to the gate
+en	ship	Rifter Megathron
+de	ship	Vargur Primär bitte
+de	ship	Megathron an der Station
+fr	ship	Raven sur la porte
+fr	ship	Tristan et Catalyst arrivent
+es	ship	Hurricane en la puerta
+es	ship	Orca en el cinturón
+ru	ship	Vargur основной
+ru	ship	Rifter на воротах
+en	url	check https://zkillboard.com/kill/12345/ for the report
+en	url	www.evemaps.dotlan.net please
+de	url	Schau mal https://zkillboard.com/kill/12345/ für den Bericht
+fr	url	regardez https://zkillboard.com/kill/12345/ pour le rapport
+es	url	mira https://zkillboard.com/kill/12345/ para el informe
+ru	url	смотри https://zkillboard.com/kill/12345/ там отчет
+en	digits	Jita 4-4 120 mil 3 jumps
+en	digits	1234 5678 91011
+de	digits	Jita 120 Millionen 3 Sprünge
+fr	digits	Jita 120 millions 3 sauts
+es	digits	Jita 120 millones 3 saltos
+ru	digits	Жита 120 млн 3 прыжка
+en	link	<url=showinfo:587//12345>Rifter</url> needs help
+en	link	<a href="showinfo:1529//98765">Jita IV</a> is full
+de	link	<url=showinfo:587//12345>Rifter</url> braucht Hilfe
+ru	link	<url=showinfo:587//12345>Rifter</url> нужна помощь
+mixed	mixed	Rifter in Jita bitte primary
+mixed	mixed	Vargur primary пожалуйста
+mixed	mixed	gate camp ahí ahora mismo
+mixed	mixed	on grid maintenant avec Raven
+mixed	mixed	fleet at station 了解
+mixed	mixed	Ok merci thanks danke
