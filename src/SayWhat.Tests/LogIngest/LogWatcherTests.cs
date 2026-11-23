@@ -87,6 +87,32 @@ public sealed class LogWatcherTests : IDisposable
         stream.Write(bytes);
     }
 
+    [Fact]
+    public void ListLivePilots_ReadsOnlyNewestFilePerChannelAndPilotNamed()
+    {
+        var current = CreateLocal("Pilot One", "2026.11.23 10:00:00", "Local_20261123_100000_111.txt");
+        var stale = CreateLocal("Ghost", "2026.11.01 10:00:00", "Local_20261101_100000_111.txt");
+        probe.Set(current, LogLockState.Held);
+        probe.Set(stale, LogLockState.Held);
+
+        var pilots = NewWatcher().ListLivePilots();
+
+        Assert.Equal(["Pilot One"], pilots.Select(p => p.Listener));
+    }
+
+    [Fact]
+    public void ListLivePilots_KeepsNewestFilePerPilotIdWhenNamesMatchThePattern()
+    {
+        var one = CreateLocal("Pilot One", "2026.11.23 10:00:00", "Local_20261123_100000_111.txt");
+        var two = CreateLocal("Pilot Two", "2026.11.23 10:00:00", "Local_20261123_100000_222.txt");
+        probe.Set(one, LogLockState.Held);
+        probe.Set(two, LogLockState.Held);
+
+        var pilots = NewWatcher().ListLivePilots();
+
+        Assert.Equal(["Pilot One", "Pilot Two"], pilots.Select(p => p.Listener).Order());
+    }
+
     private static List<string> Collect(LogWatcher watcher)
     {
         var received = new List<string>();
