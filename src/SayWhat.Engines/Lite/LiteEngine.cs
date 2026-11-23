@@ -69,9 +69,15 @@ public sealed class LiteEngine : IEngine
     {
         ArgumentNullException.ThrowIfNull(protectedText);
         IReadOnlyList<Leg>? route;
+        using var routeTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
+        routeTimeout.CancelAfter(requestTimeout);
         try
         {
-            route = await ResolveRoute(sourceLanguage, targetLanguage, cancellation).ConfigureAwait(false);
+            route = await ResolveRoute(sourceLanguage, targetLanguage, routeTimeout.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (!cancellation.IsCancellationRequested)
+        {
+            return TranslationResult.Failure(EngineErrorCategory.Timeout);
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
