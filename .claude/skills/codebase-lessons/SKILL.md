@@ -32,6 +32,8 @@ metadata:
 ### Gotchas
 - EVE chat log folders hold tens of thousands of files and each open costs ~5–30 ms: never open every file; filter by file name first, then read headers. (WS-1.2)
 - EVE Local log chat lines start with U+FEFF after the UTF-16 BOM decode; trim it before testing for `[`. (WS-1.5)
+- SDE tables come from `https://sde.evetech.net/tranquility/latest/{table}.jsonl` (302 to a dated path); bodies are gzip even though served as `application/jsonl`. (WS-1.5)
+- SDE `types` records have no `categoryID`; ships are types whose `groupID` is in a `groups` row with `categoryID` 6. (WS-1.5)
 - The EVE client holds its chat logs open for writing with write sharing allowed: detect a held log with a read open that denies write sharing, never a write open. (WS-1.2)
 - Adding a package reference also needs `SolutionIntegrationTests` (pinned package set) and `LayerDependencyTests` (which projects may hold packages) updated. (WS-1.3)
 - xUnit v3 reuses pool threads: assert "runs off the calling thread" with a blocking fake and an incomplete task, not thread ids. (WS-1.4)
