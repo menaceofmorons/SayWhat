@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using SayWhat.Core.Engines;
 using SayWhat.Core.LanguageDetection;
+using SayWhat.Core.ReferenceData;
 
 namespace SayWhat.Core.TermProtection;
 
@@ -54,17 +55,25 @@ public static class TermProtector
 
     public static string FormatToken(int index) => TokenOpen + index + TokenClose;
 
-    public static ProtectedLine Protect(string? text, string sourceLanguage, string targetLanguage)
+    public static ProtectedLine Protect(
+        string? text,
+        string sourceLanguage,
+        string targetLanguage,
+        ReferenceDatabase? reference = null,
+        string shipNameLanguage = ReferenceDatabase.DefaultShipLanguage)
     {
-        _ = sourceLanguage;
-        _ = targetLanguage;
-
         var items = new List<string>();
-        var protectedText = Protectable.Replace(text ?? string.Empty, match =>
+        string AddItem(string original)
         {
-            items.Add(match.Value);
+            items.Add(original);
             return FormatToken(items.Count - 1);
-        });
+        }
+
+        var protectedText = Protectable.Replace(text ?? string.Empty, match => AddItem(match.Value));
+        if (reference is not null)
+        {
+            protectedText = NameProtection.Apply(protectedText, sourceLanguage, targetLanguage, reference, shipNameLanguage, AddItem);
+        }
 
         var digits = Digits.Matches(CanonicalToken.Replace(protectedText, " "))
             .Select(match => match.Value)
