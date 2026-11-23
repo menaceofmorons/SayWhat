@@ -50,9 +50,9 @@ public class LayerDependencyTests
     }
 
     [Fact]
-    public void Engines_UseOnlyTheClearedTokeniser()
+    public void Engines_UseOnlyTheClearedTokeniserAndRuntime()
     {
-        Assert.Equal(["Microsoft.ML.Tokenizers"], PackageReferences("SayWhat.Engines"));
+        Assert.Equal(["Microsoft.ML.OnnxRuntime", "Microsoft.ML.Tokenizers"], PackageReferences("SayWhat.Engines"));
     }
 
     [Fact]
