@@ -18,22 +18,25 @@ public sealed class LogLockProbeTests : IDisposable
     }
 
     [Theory]
-    [InlineData(FileShare.Read)]
-    [InlineData(FileShare.None)]
-    public void HeldByOtherHandle_IsHeld(FileShare sharing)
+    [InlineData(FileAccess.Write, FileShare.ReadWrite | FileShare.Delete)]
+    [InlineData(FileAccess.Write, FileShare.ReadWrite)]
+    [InlineData(FileAccess.Write, FileShare.Read)]
+    [InlineData(FileAccess.Write, FileShare.None)]
+    [InlineData(FileAccess.ReadWrite, FileShare.ReadWrite)]
+    public void HeldByWriter_IsHeld(FileAccess access, FileShare sharing)
     {
         var path = NewFile();
-        using (new FileStream(path, FileMode.Open, FileAccess.Read, sharing))
+        using (new FileStream(path, FileMode.Open, access, sharing))
         {
             Assert.Equal(LogLockState.Held, _probe.Probe(path));
         }
     }
 
     [Fact]
-    public void HeldByWriterAllowingSharing_IsNotHeld()
+    public void HeldByReaderAllowingSharing_IsNotHeld()
     {
         var path = NewFile();
-        using var writer = new FileStream(path, FileMode.Open, FileAccess.Write, FileShare.ReadWrite);
+        using var reader = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
         Assert.Equal(LogLockState.NotHeld, _probe.Probe(path));
     }
 
@@ -41,7 +44,7 @@ public sealed class LogLockProbeTests : IDisposable
     public void AfterHandleCloses_IsNotHeld()
     {
         var path = NewFile();
-        using (new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read))
+        using (new FileStream(path, FileMode.Open, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete))
         {
             Assert.Equal(LogLockState.Held, _probe.Probe(path));
         }
