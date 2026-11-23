@@ -80,12 +80,20 @@ public sealed partial class LogWatcher : IDisposable
     {
         Stop();
         var started = new Tail(channel, probe, options, OnLines, OnSessionEnded);
+        try
+        {
+            started.Start();
+        }
+        catch
+        {
+            started.Dispose();
+            throw;
+        }
+
         lock (gate)
         {
             tail = started;
         }
-
-        started.Start();
     }
 
     public void Stop()
@@ -102,9 +110,33 @@ public sealed partial class LogWatcher : IDisposable
 
     public void Dispose() => Stop();
 
-    private void OnLines(IReadOnlyList<DecodedLine> lines) => LinesAvailable?.Invoke(lines);
+    private void OnLines(IReadOnlyList<DecodedLine> lines)
+    {
+        foreach (var subscriber in LinesAvailable?.GetInvocationList() ?? [])
+        {
+            try
+            {
+                ((Action<IReadOnlyList<DecodedLine>>)subscriber)(lines);
+            }
+            catch (Exception)
+            {
+            }
+        }
+    }
 
-    private void OnSessionEnded() => SessionEnded?.Invoke();
+    private void OnSessionEnded()
+    {
+        foreach (var subscriber in SessionEnded?.GetInvocationList() ?? [])
+        {
+            try
+            {
+                ((Action)subscriber)();
+            }
+            catch (Exception)
+            {
+            }
+        }
+    }
 
     private static bool IsLocal(LogHeader header) =>
         header.ChannelId.StartsWith(LocalChannelIdPrefix, StringComparison.OrdinalIgnoreCase);
@@ -213,6 +245,9 @@ public sealed partial class LogWatcher : IDisposable
         private LogEncoding? encoding;
         private long position;
         private Task? loop;
+        private int callbackThreadId;
+        private int disposed;
+        private int released;
 
         public Tail(
             LiveChannel channel,
@@ -230,23 +265,41 @@ public sealed partial class LogWatcher : IDisposable
 
         public void Start()
         {
-            stream = new FileStream(channel.FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-            var head = new byte[3];
-            var headRead = stream.Read(head, 0, head.Length);
-            encoding = LogTextDecoder.DetectEncoding(head.AsSpan(0, headRead));
-            position = stream.Length;
-
-            if (options.UseFileNotifications)
+            try
             {
-                StartWatcher();
-            }
+                stream = new FileStream(channel.FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                var head = new byte[3];
+                var headRead = stream.Read(head, 0, head.Length);
+                encoding = LogTextDecoder.DetectEncoding(head.AsSpan(0, headRead));
+                position = LastLineBoundary(stream.Length);
 
-            loop = Task.Run(RunAsync);
+                if (options.UseFileNotifications)
+                {
+                    StartWatcher();
+                }
+
+                loop = Task.Run(RunAsync);
+            }
+            catch
+            {
+                ReleaseResources();
+                throw;
+            }
         }
 
         public void Dispose()
         {
+            if (Interlocked.Exchange(ref disposed, 1) == 1)
+            {
+                return;
+            }
+
             cancel.Cancel();
+            if (callbackThreadId == Environment.CurrentManagedThreadId)
+            {
+                return;
+            }
+
             try
             {
                 loop?.Wait();
@@ -255,10 +308,64 @@ public sealed partial class LogWatcher : IDisposable
             {
             }
 
-            watcher?.Dispose();
-            stream?.Dispose();
+            ReleaseResources();
             cancel.Dispose();
             wake.Dispose();
+        }
+
+        private void ReleaseResources()
+        {
+            if (Interlocked.Exchange(ref released, 1) == 1)
+            {
+                return;
+            }
+
+            watcher?.Dispose();
+            stream?.Dispose();
+        }
+
+        private long LastLineBoundary(long length)
+        {
+            const int chunkBytes = 4096;
+            var unit = encoding!.UnitSize;
+            var floor = (long)encoding.PreambleLength;
+            if (length <= floor)
+            {
+                return length;
+            }
+
+            var end = length - ((length - floor) % unit);
+            var buffer = new byte[chunkBytes];
+            while (end > floor)
+            {
+                var start = Math.Max(floor, end - chunkBytes);
+                var count = (int)(end - start);
+                stream!.Position = start;
+                stream.ReadAtLeast(buffer.AsSpan(0, count), count, throwOnEndOfStream: false);
+                for (var i = count - unit; i >= 0; i -= unit)
+                {
+                    if (IsNewlineUnit(buffer, i))
+                    {
+                        return start + i + unit;
+                    }
+                }
+
+                end = start;
+            }
+
+            return floor;
+        }
+
+        private bool IsNewlineUnit(byte[] bytes, int index)
+        {
+            if (encoding!.UnitSize == 1)
+            {
+                return bytes[index] == 0x0A;
+            }
+
+            return encoding.BigEndian
+                ? bytes[index] == 0x00 && bytes[index + 1] == 0x0A
+                : bytes[index] == 0x0A && bytes[index + 1] == 0x00;
         }
 
         private void StartWatcher()
@@ -296,9 +403,9 @@ public sealed partial class LogWatcher : IDisposable
                     await wake.WaitAsync(interval, cancel.Token).ConfigureAwait(false);
                     ReadNewLines();
 
-                    if (probe.Probe(channel.LocalLogPath) == LogLockState.NotHeld)
+                    if (!cancel.IsCancellationRequested && probe.Probe(channel.LocalLogPath) == LogLockState.NotHeld)
                     {
-                        onSessionEnded();
+                        Notify(onSessionEnded);
                         return;
                     }
                 }
@@ -306,28 +413,54 @@ public sealed partial class LogWatcher : IDisposable
             catch (OperationCanceledException)
             {
             }
+            finally
+            {
+                ReleaseResources();
+            }
+        }
+
+        private void Notify(Action callback)
+        {
+            callbackThreadId = Environment.CurrentManagedThreadId;
+            try
+            {
+                callback();
+            }
+            finally
+            {
+                callbackThreadId = 0;
+            }
         }
 
         private void ReadNewLines()
         {
-            var length = stream!.Length;
-            if (length <= position)
+            DecodedChunk chunk;
+            try
+            {
+                var length = stream!.Length;
+                if (length <= position)
+                {
+                    return;
+                }
+
+                var buffer = new byte[length - position];
+                stream.Position = position;
+                var read = stream.ReadAtLeast(buffer, buffer.Length, throwOnEndOfStream: false);
+                chunk = LogTextDecoder.ReadCompleteLines(buffer[..read], 0, encoding!);
+            }
+            catch (IOException)
             {
                 return;
             }
 
-            var buffer = new byte[length - position];
-            stream.Position = position;
-            var read = stream.ReadAtLeast(buffer, buffer.Length, throwOnEndOfStream: false);
-            var chunk = LogTextDecoder.ReadCompleteLines(buffer[..read], 0, encoding!);
-            if (chunk.Lines.Count == 0)
+            if (chunk.Lines.Count == 0 || cancel.IsCancellationRequested)
             {
                 return;
             }
 
             var lines = chunk.Lines.Select(l => l with { ByteOffset = l.ByteOffset + position }).ToList();
             position += chunk.NextOffset;
-            onLines(lines);
+            Notify(() => onLines(lines));
         }
     }
 }
