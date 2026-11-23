@@ -428,8 +428,14 @@ public sealed class LogWatcherTests : IDisposable
         var returned = new ManualResetEventSlim();
         probe.Set(path, LogLockState.Held);
         var channels = watcher.ListLivePilots().Single().Channels;
+        var handled = 0;
         watcher.SessionEnded += () =>
         {
+            if (Interlocked.Exchange(ref handled, 1) == 1)
+            {
+                return;
+            }
+
             watcher.Follow(channels.Single(c => c.FilePath == other));
             returned.Set();
         };
