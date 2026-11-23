@@ -19,6 +19,7 @@ metadata:
 
 ### Build & Tooling
 - `dotnet test` with xunit.v3 on the .NET 10 SDK needs root `global.json` `{"test":{"runner":"Microsoft.Testing.Platform"}}`; VSTest mode fails. (WS-1.1)
+- `dotnet format whitespace --verify-no-changes` on the solution can exceed 2 minutes in a OneDrive worktree; run it in the background. (WS-1.4)
 
 ### Conventions
 - xUnit v3 test projects declare `<Using Include="Xunit" />`; no `xunit3` template is installed, so create test projects by hand. (WS-1.1)
