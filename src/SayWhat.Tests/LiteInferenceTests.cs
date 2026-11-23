@@ -82,6 +82,26 @@ public class LiteInferenceTests
         Assert.Throws<ArgumentOutOfRangeException>(() => new LiteInference(Tokeniser(), new StubModel([EndId]), maxLength: 0));
     }
 
+    [Fact]
+    public void Model_construction_fails_cleanly_for_unreadable_model_files()
+    {
+        var directory = Directory.CreateTempSubdirectory();
+        try
+        {
+            var encoderPath = Path.Combine(directory.FullName, "encoder.onnx");
+            var decoderPath = Path.Combine(directory.FullName, "decoder.onnx");
+            File.WriteAllText(encoderPath, "not a model");
+            File.WriteAllText(decoderPath, "not a model");
+
+            Assert.ThrowsAny<Exception>(() => new OnnxSeq2SeqModel(encoderPath, decoderPath));
+            Assert.ThrowsAny<Exception>(() => new OnnxSeq2SeqModel(Path.Combine(directory.FullName, "missing.onnx"), decoderPath));
+        }
+        finally
+        {
+            directory.Delete(true);
+        }
+    }
+
     [Theory]
     [MemberData(nameof(FixedLines))]
     public async Task Live_translation_is_deterministic_and_contains_the_expected_words(string pair, string line, string[] expected)

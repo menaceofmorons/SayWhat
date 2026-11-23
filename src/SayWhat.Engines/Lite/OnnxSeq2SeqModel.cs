@@ -24,22 +24,52 @@ public sealed class OnnxSeq2SeqModel : ISeq2SeqModel, IDisposable
     public OnnxSeq2SeqModel(string encoderPath, string decoderPath)
     {
         using var options = new SessionOptions();
-        encoder = new InferenceSession(encoderPath, options);
-        decoder = new InferenceSession(decoderPath, options);
-        cacheLayout = decoder.InputMetadata
+        InferenceSession? loadedEncoder = null;
+        InferenceSession? loadedDecoder = null;
+        try
+        {
+            loadedEncoder = new InferenceSession(encoderPath, options);
+            loadedDecoder = new InferenceSession(decoderPath, options);
+            cacheLayout = BuildCacheLayout(loadedDecoder);
+        }
+        catch
+        {
+            loadedDecoder?.Dispose();
+            loadedEncoder?.Dispose();
+            throw;
+        }
+
+        encoder = loadedEncoder;
+        decoder = loadedDecoder;
+    }
+
+    private static CacheEntry[] BuildCacheLayout(InferenceSession decoderSession)
+    {
+        var layout = decoderSession.InputMetadata
             .Where(pair => pair.Key.StartsWith(PastPrefix, StringComparison.Ordinal))
             .OrderBy(pair => pair.Key, StringComparer.Ordinal)
-            .Select(pair => new CacheEntry(
-                pair.Key,
-                PresentPrefix + pair.Key[PastPrefix.Length..],
-                pair.Value.Dimensions[1],
-                pair.Value.Dimensions[3],
-                pair.Key.Contains(EncoderCacheMarker, StringComparison.Ordinal)))
+            .Select(pair =>
+            {
+                var dimensions = pair.Value.Dimensions;
+                if (dimensions.Length < 4)
+                {
+                    throw new InvalidDataException("Decoder cache inputs are not in the expected layout");
+                }
+
+                return new CacheEntry(
+                    pair.Key,
+                    PresentPrefix + pair.Key[PastPrefix.Length..],
+                    dimensions[1],
+                    dimensions[3],
+                    pair.Key.Contains(EncoderCacheMarker, StringComparison.Ordinal));
+            })
             .ToArray();
-        if (cacheLayout.Count == 0 || cacheLayout.Any(entry => entry.Heads <= 0 || entry.HeadSize <= 0))
+        if (layout.Length == 0 || layout.Any(entry => entry.Heads <= 0 || entry.HeadSize <= 0))
         {
             throw new InvalidDataException("Decoder cache inputs are not in the expected layout");
         }
+
+        return layout;
     }
 
     public ISeq2SeqDecoding Encode(IReadOnlyList<int> inputIds)
