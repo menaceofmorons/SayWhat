@@ -55,6 +55,16 @@ public class SetAsideTests
         Assert.Equal("the is here", result.Text);
     }
 
+    [Fact]
+    public void PreparedMatcherIsReusableAcrossLines()
+    {
+        var matcher = new ShipNameMatcher(["Vargur", "Rifter"]);
+
+        Assert.Equal("fly the now", SetAside.Apply("fly the Vargur now", matcher).Text);
+        Assert.Equal("and again", SetAside.Apply("rifter and again", matcher).Text);
+        Assert.Equal("Vargurs", SetAside.Apply("Vargurs", matcher).Text);
+    }
+
     [Theory]
     [InlineData("")]
     [InlineData(null)]
