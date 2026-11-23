@@ -76,6 +76,9 @@ public static class LiveSession
     public static FileStream OpenWriteShared(string path) =>
         new(path, FileMode.Open, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete);
 
+    public static FileStream OpenReadOnlyShared(string path) =>
+        new(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+
     public static IReadOnlyList<DecodedLine> ReadAllLines(string path)
     {
         using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);

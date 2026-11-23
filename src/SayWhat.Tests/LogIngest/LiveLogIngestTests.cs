@@ -15,9 +15,9 @@ public sealed partial class LiveLogIngestTests
     private const int DefaultWaitSeconds = 300;
 
     [Fact(Skip = "Live validation: set SAYWHAT_LIVE=1 (and SAYWHAT_LIVE_STEP for interactive steps)", SkipUnless = nameof(LiveSwitch.RunningStep), SkipType = typeof(LiveSwitch))]
-    public void Od006_ClientRunning_LocalLogProbeHeldAndWriteShareOpenFails()
+    public void Od006_ClientRunning_LocalLogProbeHeldAndReadOpenDeniedWriteShareOpenOk()
     {
-        const string test = nameof(Od006_ClientRunning_LocalLogProbeHeldAndWriteShareOpenFails);
+        const string test = nameof(Od006_ClientRunning_LocalLogProbeHeldAndReadOpenDeniedWriteShareOpenOk);
         var pilot = LiveSession.FindLivePilot();
         var local = LiveSession.LocalOf(pilot);
         var probe = new WindowsLogLockProbe();
@@ -26,13 +26,11 @@ public sealed partial class LiveLogIngestTests
         LiveReport.Write(test, "local.probe", state);
         Assert.Equal(LogLockState.Held, state);
 
-        var failure = Assert.Throws<IOException>(() => LiveSession.OpenWriteShared(local.FilePath).Dispose());
-        LiveReport.Write(test, "local.write-share-open", $"failed, win32 code {failure.HResult & 0xFFFF}");
+        var failure = Assert.Throws<IOException>(() => LiveSession.OpenReadOnlyShared(local.FilePath).Dispose());
+        LiveReport.Write(test, "local.read-open-denying-write-share", $"failed, win32 code {failure.HResult & 0xFFFF}");
 
-        using (new FileStream(local.FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
-        {
-            LiveReport.Write(test, "local.read-share-open", "ok");
-        }
+        LiveSession.OpenWriteShared(local.FilePath).Dispose();
+        LiveReport.Write(test, "local.write-share-open", "ok");
 
         LiveReport.Write(test, "live-pilots", pilot.Channels.Count > 0 ? 1 : 0);
         LiveReport.Write(test, "channels-listed-for-live-session", pilot.Channels.Count);
@@ -66,14 +64,24 @@ public sealed partial class LiveLogIngestTests
         LiveReport.Write(test, "local.probe", state);
         Assert.Equal(LogLockState.NotHeld, state);
 
+        LiveSession.OpenReadOnlyShared(path).Dispose();
+        LiveReport.Write(test, "local.read-open-denying-write-share", "ok");
         LiveSession.OpenWriteShared(path).Dispose();
         LiveReport.Write(test, "local.write-share-open", "ok");
 
         var directory = Path.GetDirectoryName(path)!;
-        var stillHeld = Directory.EnumerateFiles(directory, "*.txt")
-            .OrderByDescending(File.GetLastWriteTimeUtc)
-            .Take(50)
-            .Count(f => probe.Probe(f) == LogLockState.Held);
+        var stillHeld = 0;
+        var ordinal = 0;
+        foreach (var file in Directory.EnumerateFiles(directory, "*.txt").OrderByDescending(File.GetLastWriteTimeUtc).Take(50))
+        {
+            var fileState = probe.Probe(file);
+            LiveReport.Write(test, $"file#{++ordinal}", fileState);
+            if (fileState == LogLockState.Held)
+            {
+                stillHeld++;
+            }
+        }
+
         LiveReport.Write(test, "newest-50-files-still-held", stillHeld);
         Assert.Equal(0, stillHeld);
     }
@@ -86,15 +94,33 @@ public sealed partial class LiveLogIngestTests
         LiveReport.Write(test, "supplied-folder-exists", Directory.Exists(supplied));
         Assert.True(Directory.Exists(supplied));
 
-        var probe = new WindowsLogLockProbe();
-        var held = Directory.EnumerateFiles(supplied, "*.txt")
-            .OrderByDescending(File.GetLastWriteTimeUtc)
-            .Take(200)
-            .Where(f => probe.Probe(f) == LogLockState.Held)
-            .ToList();
+        var realFolder = Path.GetDirectoryName(LiveSession.LocalOf(LiveSession.FindLivePilot()).FilePath)!;
+        var sameFolder = string.Equals(
+            Path.GetFullPath(supplied).TrimEnd(Path.DirectorySeparatorChar),
+            Path.GetFullPath(realFolder).TrimEnd(Path.DirectorySeparatorChar),
+            StringComparison.OrdinalIgnoreCase);
+        LiveReport.Write(test, "supplied-folder-equals-live-local-log-folder", sameFolder);
 
+        var probe = new WindowsLogLockProbe();
+        var held = new List<string>();
+        var ordinal = 0;
+        foreach (var file in Directory.EnumerateFiles(supplied, "*.txt").OrderByDescending(File.GetLastWriteTimeUtc).Take(200))
+        {
+            var state = probe.Probe(file);
+            if (ordinal++ < 20 || state != LogLockState.NotHeld)
+            {
+                LiveReport.Write(test, $"file#{ordinal}", $"{state}, name-prefix={Path.GetFileName(file).Split('_')[0]}");
+            }
+
+            if (state == LogLockState.Held)
+            {
+                held.Add(file);
+            }
+        }
+
+        LiveReport.Write(test, "files-probed", ordinal);
         LiveReport.Write(test, "held-files-in-supplied-folder", held.Count);
-        LiveReport.Write(test, "supplied-folder-is-documents-eve-logs-chatlogs", true);
+        Assert.True(sameFolder);
         Assert.NotEmpty(held);
     }
 

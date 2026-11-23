@@ -11,7 +11,7 @@ public sealed class WindowsLogLockProbe : ILogLockProbe
     {
         try
         {
-            using var stream = new FileStream(path, FileMode.Open, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete);
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
             return LogLockState.NotHeld;
         }
         catch (IOException ex) when (IsSharingViolation(ex))
