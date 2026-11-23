@@ -278,6 +278,91 @@ public sealed class LiteEngineTests : IDisposable
         }
     }
 
+    [Theory]
+    [InlineData(HttpStatusCode.NotFound)]
+    [InlineData(HttpStatusCode.Unauthorized)]
+    public async Task Catalogue_treats_a_missing_repository_as_unpublished(HttpStatusCode status)
+    {
+        var catalogue = new XenovaModelCatalogue(new HttpClient(new StubHandler(status, "")));
+
+        Assert.Null(await catalogue.FindSizeAsync(new LanguagePair("de", "ru"), default));
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.InternalServerError)]
+    [InlineData(HttpStatusCode.ServiceUnavailable)]
+    public async Task Catalogue_throws_on_server_errors(HttpStatusCode status)
+    {
+        var catalogue = new XenovaModelCatalogue(new HttpClient(new StubHandler(status, "")));
+
+        await Assert.ThrowsAsync<HttpRequestException>(() => catalogue.FindSizeAsync(new LanguagePair("de", "en"), default));
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.NotFound)]
+    [InlineData(HttpStatusCode.Unauthorized)]
+    public async Task Missing_direct_repository_resolves_to_the_pivot_route_with_download_sizes(HttpStatusCode missing)
+    {
+        var listing = ListingJson(10);
+        var client = new HttpClient(new RoutingHandler(url =>
+            url.Contains("opus-mt-de-en") || url.Contains("opus-mt-en-ru") ? (HttpStatusCode.OK, listing) : (missing, "")));
+
+        var prepared = await Engine(new XenovaModelCatalogue(client)).Prepare("de", "ru", default);
+
+        var download = Assert.IsType<PrepareResult.NeedsDownload>(prepared);
+        Assert.Equal(20L * LiteEngine.RequiredFiles.Count, download.SizeBytes);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.NotFound)]
+    [InlineData(HttpStatusCode.Unauthorized)]
+    public async Task Missing_repositories_without_a_route_are_no_model(HttpStatusCode missing)
+    {
+        var client = new HttpClient(new StubHandler(missing, ""));
+
+        var prepared = await Engine(new XenovaModelCatalogue(client)).Prepare("ru", "ko", default);
+        var translated = await Engine(new XenovaModelCatalogue(client)).Translate("hi", "ru", "ko", default);
+
+        Assert.IsType<PrepareResult.NoModel>(prepared);
+        Assert.Equal(EngineErrorCategory.NoModel, translated.Error!.Category);
+    }
+
+    [Fact]
+    public async Task Missing_direct_repository_pivots_through_english_on_translate()
+    {
+        Install("de-en");
+        Install("en-ru");
+        var client = new HttpClient(new StubHandler(HttpStatusCode.Unauthorized, ""));
+
+        var result = await Engine(new XenovaModelCatalogue(client)).Translate("hallo", "de", "ru", default);
+
+        Assert.Equal("hallo|de-en|en-ru", result.Text);
+    }
+
+    [Fact]
+    public async Task Server_error_from_the_catalogue_is_unavailable()
+    {
+        var client = new HttpClient(new StubHandler(HttpStatusCode.InternalServerError, ""));
+
+        var result = await Engine(new XenovaModelCatalogue(client)).Translate("hi", "de", "ru", default);
+
+        Assert.Equal(EngineErrorCategory.Unavailable, result.Error!.Category);
+    }
+
+    [Fact]
+    public async Task Live_catalogue_resolves_the_pivot_route_for_german_to_russian()
+    {
+        Assert.SkipUnless(Environment.GetEnvironmentVariable("SAYWHAT_FETCH_TEST_MODELS") == "1", "live catalogue checks are opt-in");
+        using var client = new HttpClient();
+
+        var prepared = await Engine(new XenovaModelCatalogue(client)).Prepare("de", "ru", default);
+
+        Assert.IsType<PrepareResult.NeedsDownload>(prepared);
+    }
+
+    private static string ListingJson(long size) =>
+        "{\"siblings\":[" + string.Join(",", LiteEngine.RequiredFiles.Select(f => $"{{\"rfilename\":\"{f}\",\"size\":{size}}}")) + "]}";
+
     [Fact]
     public async Task Translate_russian_to_korean_has_no_route()
     {
@@ -319,6 +404,21 @@ public sealed class LiteEngineTests : IDisposable
             File.WriteAllText(path, "x");
         }
     }
+
+    private LiteEngine Engine(
+        ILiteModelCatalogue catalogueOverride,
+        TimeSpan? timeout = null) =>
+        new(
+            folder,
+            catalogueOverride,
+            () =>
+            {
+                var host = new ModelHost(TimeSpan.FromMinutes(10), 500L * 1024 * 1024, TimeProvider.System);
+                hosts.Add(host);
+                return host;
+            },
+            path => new FakeTranslator(Path.GetFileName(path), null, null, null),
+            timeout ?? TimeSpan.FromSeconds(30));
 
     private LiteEngine Engine(
         Action<ModelHost>? hostOut = null,
@@ -377,5 +477,14 @@ public sealed class LiteEngineTests : IDisposable
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
             Task.FromResult(new HttpResponseMessage(status) { Content = new StringContent(body, Encoding.UTF8, "application/json") });
+    }
+
+    private sealed class RoutingHandler(Func<string, (HttpStatusCode Status, string Body)> route) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var (status, body) = route(request.RequestUri!.AbsoluteUri);
+            return Task.FromResult(new HttpResponseMessage(status) { Content = new StringContent(body, Encoding.UTF8, "application/json") });
+        }
     }
 }
