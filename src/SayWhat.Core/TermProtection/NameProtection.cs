@@ -9,9 +9,11 @@ namespace SayWhat.Core.TermProtection;
 
 internal static class NameProtection
 {
+    internal const int MinimumUnspacedLength = 4;
+
     private static readonly ConditionalWeakTable<ReferenceDatabase, NameIndex> Indexes = new();
 
-    public static string Apply(string text, string sourceLanguage, string targetLanguage, ReferenceDatabase reference, string shipNameLanguage, Func<string, string> addItem)
+    public static string Apply(string text, string sourceLanguage, string targetLanguage, ReferenceDatabase reference, string shipNameLanguage, Func<string, string> addItem, int minimumUnspacedLength = MinimumUnspacedLength)
     {
         if (string.IsNullOrEmpty(text) || !reference.Exists)
         {
@@ -20,7 +22,7 @@ internal static class NameProtection
 
         var index = Indexes.GetValue(reference, database => new NameIndex(database));
         var withShips = ReplaceShips(text, sourceLanguage, targetLanguage, shipNameLanguage, reference, index, addItem);
-        return ReplaceSystems(withShips, index, addItem);
+        return ReplaceSystems(withShips, index, addItem, minimumUnspacedLength);
     }
 
     private static string ReplaceShips(string text, string sourceLanguage, string targetLanguage, string shipNameLanguage, ReferenceDatabase reference, NameIndex index, Func<string, string> addItem)
@@ -41,7 +43,7 @@ internal static class NameProtection
         });
     }
 
-    private static string ReplaceSystems(string text, NameIndex index, Func<string, string> addItem)
+    private static string ReplaceSystems(string text, NameIndex index, Func<string, string> addItem, int minimumUnspacedLength)
     {
         var names = index.SystemNames;
         if (names.Count == 0)
@@ -57,7 +59,7 @@ internal static class NameProtection
         {
             var open = text.IndexOf(TermProtector.TokenOpen, position, StringComparison.Ordinal);
             var segmentEnd = open < 0 ? text.Length : open;
-            ScanSegment(text.AsSpan(position, segmentEnd - position), lookup, longest, addItem, builder);
+            ScanSegment(text.AsSpan(position, segmentEnd - position), lookup, longest, minimumUnspacedLength, addItem, builder);
             if (open < 0)
             {
                 break;
@@ -72,12 +74,12 @@ internal static class NameProtection
         return builder.ToString();
     }
 
-    private static void ScanSegment(ReadOnlySpan<char> segment, HashSet<string>.AlternateLookup<ReadOnlySpan<char>> lookup, int longest, Func<string, string> addItem, StringBuilder builder)
+    private static void ScanSegment(ReadOnlySpan<char> segment, HashSet<string>.AlternateLookup<ReadOnlySpan<char>> lookup, int longest, int minimumUnspacedLength, Func<string, string> addItem, StringBuilder builder)
     {
         var i = 0;
         while (i < segment.Length)
         {
-            var length = i > 0 && IsBoundaryBlocker(segment[i - 1]) ? 0 : LongestMatchAt(segment, i, lookup, longest);
+            var length = LongestMatchAt(segment, i, lookup, longest, minimumUnspacedLength);
             if (length > 0)
             {
                 builder.Append(addItem(segment.Slice(i, length).ToString()));
@@ -91,12 +93,13 @@ internal static class NameProtection
         }
     }
 
-    private static int LongestMatchAt(ReadOnlySpan<char> segment, int start, HashSet<string>.AlternateLookup<ReadOnlySpan<char>> lookup, int longest)
+    private static int LongestMatchAt(ReadOnlySpan<char> segment, int start, HashSet<string>.AlternateLookup<ReadOnlySpan<char>> lookup, int longest, int minimumUnspacedLength)
     {
         for (var length = Math.Min(longest, segment.Length - start); length > 0; length--)
         {
             var end = start + length;
-            if (end < segment.Length && IsBoundaryBlocker(segment[end]))
+            Func<char, bool> blocks = length < minimumUnspacedLength ? IsWordChar : IsBoundaryBlocker;
+            if ((start > 0 && blocks(segment[start - 1])) || (end < segment.Length && blocks(segment[end])))
             {
                 continue;
             }

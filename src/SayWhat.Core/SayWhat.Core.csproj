@@ -10,4 +10,8 @@
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.15" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="SayWhat.Tests" />
+  </ItemGroup>
+
 </Project>
