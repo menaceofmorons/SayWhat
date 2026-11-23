@@ -388,6 +388,250 @@ public sealed class LogWatcherTests : IDisposable
         Assert.Equal(stamp, File.GetLastWriteTimeUtc(path));
     }
 
+    private static void AppendRaw(string path, params byte[] bytes)
+    {
+        using var stream = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.ReadWrite);
+        stream.Write(bytes);
+    }
+
+    private static void AssertCompletesWithin(Action action)
+    {
+        var task = Task.Run(action);
+        Assert.True(task.Wait(Wait), "call did not return (deadlock)");
+        task.GetAwaiter().GetResult();
+    }
+
+    [Fact]
+    public void Stop_FromSessionEndedHandler_DoesNotDeadlock()
+    {
+        var path = CreateLocal("Pilot One", "2026.11.23 10:00:00", "local.txt");
+        var watcher = NewWatcher();
+        var returned = new ManualResetEventSlim();
+        watcher.SessionEnded += () =>
+        {
+            watcher.Stop();
+            returned.Set();
+        };
+        FollowLocal(watcher, path);
+
+        probe.Set(path, LogLockState.NotHeld);
+
+        Assert.True(returned.Wait(Wait, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public void Follow_FromSessionEndedHandler_DoesNotDeadlock()
+    {
+        var path = CreateLocal("Pilot One", "2026.11.23 10:00:00", "local.txt");
+        var other = CreateChannel("corp", "Pilot One", "2026.11.23 10:05:00", "corp.txt");
+        var watcher = NewWatcher();
+        var returned = new ManualResetEventSlim();
+        probe.Set(path, LogLockState.Held);
+        var channels = watcher.ListLivePilots().Single().Channels;
+        watcher.SessionEnded += () =>
+        {
+            watcher.Follow(channels.Single(c => c.FilePath == other));
+            returned.Set();
+        };
+        watcher.Follow(channels.Single(c => c.FilePath == path));
+
+        probe.Set(path, LogLockState.NotHeld);
+
+        Assert.True(returned.Wait(Wait, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public void Stop_FromLinesAvailableHandler_DoesNotDeadlock()
+    {
+        var path = CreateLocal("Pilot One", "2026.11.23 10:00:00", "local.txt");
+        var watcher = NewWatcher();
+        var returned = new ManualResetEventSlim();
+        watcher.LinesAvailable += _ =>
+        {
+            watcher.Stop();
+            returned.Set();
+        };
+        FollowLocal(watcher, path);
+
+        Append(path, "utf16le", "one\r\n");
+
+        Assert.True(returned.Wait(Wait, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public void Follow_FromLinesAvailableHandler_DoesNotDeadlock()
+    {
+        var path = CreateLocal("Pilot One", "2026.11.23 10:00:00", "local.txt");
+        var other = CreateChannel("corp", "Pilot One", "2026.11.23 10:05:00", "corp.txt");
+        var watcher = NewWatcher();
+        var returned = new ManualResetEventSlim();
+        probe.Set(path, LogLockState.Held);
+        var channels = watcher.ListLivePilots().Single().Channels;
+        watcher.LinesAvailable += _ =>
+        {
+            watcher.Follow(channels.Single(c => c.FilePath == other));
+            returned.Set();
+        };
+        watcher.Follow(channels.Single(c => c.FilePath == path));
+
+        Append(path, "utf16le", "one\r\n");
+
+        Assert.True(returned.Wait(Wait, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public void ThrowingSubscriber_DoesNotStopDeliveryOrSessionEnd()
+    {
+        var path = CreateLocal("Pilot One", "2026.11.23 10:00:00", "local.txt");
+        var watcher = NewWatcher();
+        watcher.LinesAvailable += _ => throw new InvalidOperationException();
+        var received = Collect(watcher);
+        var ended = 0;
+        watcher.SessionEnded += () => throw new InvalidOperationException();
+        watcher.SessionEnded += () => Interlocked.Increment(ref ended);
+        FollowLocal(watcher, path);
+
+        Append(path, "utf16le", "one\r\n");
+        Assert.True(WaitFor(() => Count(received) == 1));
+        Append(path, "utf16le", "two\r\n");
+        Assert.True(WaitFor(() => Count(received) == 2));
+        probe.Set(path, LogLockState.NotHeld);
+
+        Assert.True(WaitFor(() => Volatile.Read(ref ended) == 1));
+    }
+
+    [Fact]
+    public void LockedRegion_IsTreatedAsNoNewData_ThenRecovers()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var path = CreateLocal("Pilot One", "2026.11.23 10:00:00", "local.txt");
+        var watcher = NewWatcher();
+        var received = Collect(watcher);
+        var ended = 0;
+        watcher.SessionEnded += () => Interlocked.Increment(ref ended);
+        FollowLocal(watcher, path);
+
+        using var writer = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.ReadWrite);
+        var start = writer.Length;
+        var bytes = Encoding.Unicode.GetBytes("locked\r\n");
+        writer.Write(bytes);
+        writer.Flush();
+        writer.Lock(start, bytes.Length);
+        Thread.Sleep(200);
+        Assert.Equal(0, Count(received));
+        writer.Unlock(start, bytes.Length);
+
+        Assert.True(WaitFor(() => Count(received) == 1));
+        Assert.Equal(0, Volatile.Read(ref ended));
+        probe.Set(path, LogLockState.NotHeld);
+        Assert.True(WaitFor(() => Volatile.Read(ref ended) == 1));
+    }
+
+    [Theory]
+    [InlineData("utf16le")]
+    [InlineData("utf16be")]
+    [InlineData("utf8")]
+    public void Follow_StartedMidLine_DeliversTheWholeLineOnceComplete(string encoding)
+    {
+        var path = Create("local.txt", Header("local", "Local", "Pilot One", "2026.11.23 10:00:00"), encoding);
+        Append(path, encoding, "[ 2026.11.23 10:00:02 ] A > par");
+        var watcher = NewWatcher();
+        var received = Collect(watcher);
+        FollowLocal(watcher, path);
+
+        Append(path, encoding, "tial\r\n");
+
+        Assert.True(WaitFor(() => Count(received) == 1));
+        lock (received)
+        {
+            Assert.Equal("[ 2026.11.23 10:00:02 ] A > partial", received[0]);
+        }
+    }
+
+    [Fact]
+    public void Follow_StartedMidCodeUnit_KeepsUtf16Aligned()
+    {
+        var path = CreateLocal("Pilot One", "2026.11.23 10:00:00", "local.txt");
+        Append(path, "utf16le", "[ 2026.11.23 10:00:02 ] A > par");
+        AppendRaw(path, 0x74);
+        var watcher = NewWatcher();
+        var received = Collect(watcher);
+        FollowLocal(watcher, path);
+
+        AppendRaw(path, 0x00);
+        Append(path, "utf16le", "\r\nnext\r\n");
+
+        Assert.True(WaitFor(() => Count(received) == 2));
+        lock (received)
+        {
+            Assert.Equal("[ 2026.11.23 10:00:02 ] A > part", received[0]);
+            Assert.Equal("next", received[1]);
+        }
+    }
+
+    [Fact]
+    public void Unavailable_DoesNotEndTheSession()
+    {
+        var path = CreateLocal("Pilot One", "2026.11.23 10:00:00", "local.txt");
+        var watcher = NewWatcher();
+        var received = Collect(watcher);
+        var ended = 0;
+        watcher.SessionEnded += () => Interlocked.Increment(ref ended);
+        FollowLocal(watcher, path);
+
+        probe.Set(path, LogLockState.Unavailable);
+        Thread.Sleep(200);
+        Append(path, "utf16le", "still\r\n");
+
+        Assert.True(WaitFor(() => Count(received) == 1));
+        Assert.Equal(0, Volatile.Read(ref ended));
+    }
+
+    [Fact]
+    public void SessionEnd_ReleasesTheFile()
+    {
+        var path = CreateLocal("Pilot One", "2026.11.23 10:00:00", "local.txt");
+        var watcher = NewWatcher();
+        var ended = 0;
+        watcher.SessionEnded += () => Interlocked.Increment(ref ended);
+        FollowLocal(watcher, path);
+
+        probe.Set(path, LogLockState.NotHeld);
+
+        Assert.True(WaitFor(() => Volatile.Read(ref ended) == 1));
+        Assert.True(WaitFor(() =>
+        {
+            try
+            {
+                using var exclusive = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+                return true;
+            }
+            catch (IOException)
+            {
+                return false;
+            }
+        }));
+    }
+
+    [Fact]
+    public void Follow_OfMissingFile_Throws_AndLeavesNothingFollowed()
+    {
+        var path = CreateLocal("Pilot One", "2026.11.23 10:00:00", "local.txt");
+        var watcher = NewWatcher();
+        var received = Collect(watcher);
+        probe.Set(path, LogLockState.Held);
+        var channel = watcher.ListLivePilots().Single().Channels.Single();
+        File.Delete(path);
+
+        AssertCompletesWithin(() => Assert.ThrowsAny<IOException>(() => watcher.Follow(channel)));
+        AssertCompletesWithin(watcher.Stop);
+        Assert.Equal(0, Count(received));
+    }
+
     [Fact]
     public void PollInterval_IsTheDesignValue()
     {
