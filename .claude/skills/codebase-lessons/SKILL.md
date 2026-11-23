@@ -23,5 +23,10 @@ metadata:
 ### Conventions
 - xUnit v3 test projects declare `<Using Include="Xunit" />`; no `xunit3` template is installed, so create test projects by hand. (WS-1.1)
 - New code goes into the existing layer projects; `src/SayWhat.sln` does not change in PH-1. (WS-1.1)
+- Adding a package reference also needs `SolutionIntegrationTests` (pinned package set) and `LayerDependencyTests` (which projects may hold packages) updated. (WS-1.3)
+
+### Dependencies
+- Inspect a NuGet package without a build: download `https://api.nuget.org/v3-flatcontainer/{id}/{version}/{id}.{version}.nupkg` and open it as a zip. (WS-1.3)
+- Panlingo fastText: `Predict(text, k, 0f)` with k above the label count returns every label, which allows a script-restricted top-1. (WS-1.3)
 
 ### Gotchas
