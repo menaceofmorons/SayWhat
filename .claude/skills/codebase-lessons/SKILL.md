@@ -31,6 +31,7 @@ metadata:
 
 ### Gotchas
 - EVE chat log folders hold tens of thousands of files and each open costs ~5–30 ms: never open every file; filter by file name first, then read headers. (WS-1.2)
+- EVE Local log chat lines start with U+FEFF after the UTF-16 BOM decode; trim it before testing for `[`. (WS-1.5)
 - The EVE client holds its chat logs open for writing with write sharing allowed: detect a held log with a read open that denies write sharing, never a write open. (WS-1.2)
 - Adding a package reference also needs `SolutionIntegrationTests` (pinned package set) and `LayerDependencyTests` (which projects may hold packages) updated. (WS-1.3)
 - xUnit v3 reuses pool threads: assert "runs off the calling thread" with a blocking fake and an incomplete task, not thread ids. (WS-1.4)
@@ -42,4 +43,5 @@ metadata:
 
 ### Dependencies
 - Inspect a NuGet package without a build: download `https://api.nuget.org/v3-flatcontainer/{id}/{version}/{id}.{version}.nupkg` and open it as a zip. (WS-1.3)
+- `Microsoft.Data.Sqlite` 10.0.x depends on `SQLitePCLRaw` 2.1.13, not the 3.0.x line; pin only `Microsoft.Data.Sqlite` and let the bundle resolve. (WS-1.5)
 - Panlingo fastText: `Predict(text, k, 0f)` with k above the label count returns every label, which allows a script-restricted top-1. (WS-1.3)
