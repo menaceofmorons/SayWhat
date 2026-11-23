@@ -1,3 +1,6 @@
+using System.IO.Compression;
+using System.Text.Json;
+using System.Text.RegularExpressions;
 using SayWhat.Core.ReferenceData;
 using SayWhat.Core.TermProtection;
 
@@ -171,6 +174,122 @@ public sealed class NameProtectionTests : IDisposable
         var missing = new ReferenceDatabase(Path.Combine(directory, "none.db"));
 
         Assert.Equal("Rifter in Jita", TermProtector.Protect("Rifter in Jita", "en", "fr", missing).Text);
+    }
+
+    [Theory]
+    [InlineData("ja", "ジタで戦う", "⟦0⟧で戦う", "ジタ")]
+    [InlineData("ja", "私のジタ", "私の⟦0⟧", "ジタ")]
+    [InlineData("ja", "ジタ、逃げろ", "⟦0⟧、逃げろ", "ジタ")]
+    [InlineData("zh", "我在吉他很强", "我在⟦0⟧很强", "吉他")]
+    [InlineData("zh", "吉他，攻击", "⟦0⟧，攻击", "吉他")]
+    [InlineData("ko", "我们去지타到", "我们去⟦0⟧到", "지타")]
+    [InlineData("ko", "지타 도착", "⟦0⟧ 도착", "지타")]
+    [InlineData("en", "Jita到了", "⟦0⟧到了", "Jita")]
+    public void SystemNameGluedToUnspacedScriptTextIsProtectedAndRestoredAsWritten(string source, string text, string protectedText, string name)
+    {
+        var line = TermProtector.Protect(text, source, "de", database);
+
+        Assert.Equal(protectedText, line.Text);
+        Assert.Equal([name], line.Items);
+        Assert.Equal(text, Translate(text, source, "de"));
+    }
+
+    [Theory]
+    [InlineData("ja", "ジタpls")]
+    [InlineData("ja", "XジタX")]
+    [InlineData("ja", "ジタ3隻")]
+    [InlineData("zh", "吉他_")]
+    [InlineData("ko", "지타에서")]
+    [InlineData("ko", "내지타")]
+    [InlineData("en", "到Jitaaa")]
+    public void SystemNameGluedToSpacedScriptLetterOrDigitIsNotProtected(string source, string text)
+    {
+        Assert.Equal(text, TermProtector.Protect(text, source, "de", database).Text);
+    }
+
+    [Fact]
+    public void MultiWordSystemNameInsideALongerNameIsNotProtected()
+    {
+        Assert.Equal("NewEden Neu Edenx", TermProtector.Protect("NewEden Neu Edenx", "de", "en", database).Text);
+    }
+
+    private static readonly Dictionary<string, string[]> MentionTemplates = new()
+    {
+        ["ja"] = ["{0}で攻撃", "{0}が来た", "私の{0}", "{0}、逃げろ", "{0} 攻撃", "{0}。", "敵の{0}を撃て", "{0}3隻", "{0}pls"],
+        ["zh"] = ["{0}在这里", "我的{0}", "{0}，攻击", "{0}很强", "{0} 攻击", "{0}。", "敌人的{0}来了", "{0}3艘", "{0}pls"],
+        ["ko"] = ["{0}에서 만나자", "{0}로 가자", "내 {0}", "{0}, 가자", "{0} 도착", "{0}。", "{0}3척", "{0}pls"],
+    };
+
+    private const string AnyLetterOrDigit = @"[\p{L}\p{M}\p{Nd}_]";
+
+    [Fact]
+    public async Task Measure_LiveSdeSystemNames_GluedMentionsAndFalseMatches()
+    {
+        var cache = await SdeTestCache.TryGetAsync();
+        Assert.SkipUnless(cache is not null, "SDE cache absent; set SAYWHAT_FETCH_TEST_SDE=1 to fetch it.");
+
+        var livePath = Path.Combine(directory, "live-systems.db");
+        new SdeImporter(new DirectorySdeSource(cache!)).Import(livePath, TestContext.Current.CancellationToken);
+        var live = new ReferenceDatabase(livePath);
+        var systemSet = live.ClientLanguages().SelectMany(live.SystemNames).Select(name => name.Trim()).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var wholeWord = new Regex("(?<!" + AnyLetterOrDigit + ")(?:" + string.Join("|", systemSet.OrderByDescending(name => name.Length).Select(Regex.Escape)) + ")(?!" + AnyLetterOrDigit + ")", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        var shipIds = live.ShipNames("en").Select(entry => entry.TypeId).ToHashSet();
+        var itemNames = ReadPublishedNonShipNames(cache!, shipIds);
+        Report($"SYS source: SDE build {live.SdeVersion}; {systemSet.Count} distinct system names across client languages");
+
+        foreach (var (language, templates) in MentionTemplates)
+        {
+            var names = live.SystemNames(language).Select(name => name.Trim()).Where(name => name.Length > 0).Distinct(StringComparer.Ordinal).ToList();
+            var mentions = names.SelectMany(name => templates.Select(template => (Name: name, Text: string.Format(template, name)))).ToList();
+            var baits = live.ShipNames(language).Select(entry => entry.Name)
+                .Concat(itemNames.Where(map => map.ContainsKey(language)).Select(map => map[language]))
+                .Where(text => text.Length > 0 && !systemSet.Contains(text.Trim()))
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+
+            var shippedMisses = mentions.Count(mention => !TermProtector.Protect(mention.Text, language, "de", live).Items.Contains(mention.Name, StringComparer.OrdinalIgnoreCase));
+            var wholeWordMisses = mentions.Count(mention => !wholeWord.Matches(mention.Text).Any(match => string.Equals(match.Value, mention.Name, StringComparison.OrdinalIgnoreCase)));
+            var shippedFalse = baits.Count(bait => TermProtector.Protect(bait, language, "de", live).Items.Any(systemSet.Contains));
+            var wholeWordFalse = baits.Count(bait => wholeWord.IsMatch(bait));
+            Report($"SYS {language}: {names.Count} system names; {mentions.Count} glued mention lines ({templates.Length} templates); {baits.Count} bait names (ship and published non-ship item names)");
+            Report($"SYS {language} option-C: misses {shippedMisses}/{mentions.Count}; false matches {shippedFalse}/{baits.Count}");
+            Report($"SYS {language} whole-word: misses {wholeWordMisses}/{mentions.Count}; false matches {wholeWordFalse}/{baits.Count}");
+            Assert.True(mentions.Count > 0 && baits.Count > 0);
+        }
+    }
+
+    private static void Report(string line)
+    {
+        Console.WriteLine(line);
+        var path = Environment.GetEnvironmentVariable("SAYWHAT_SYS_REPORT");
+        if (!string.IsNullOrEmpty(path))
+        {
+            File.AppendAllText(path, line + Environment.NewLine);
+        }
+    }
+
+    private static List<Dictionary<string, string>> ReadPublishedNonShipNames(string cache, HashSet<int> shipTypeIds)
+    {
+        var result = new List<Dictionary<string, string>>();
+        using var file = File.OpenRead(Path.Combine(cache, "types.jsonl"));
+        var gzipped = file.ReadByte() == 0x1F && file.ReadByte() == 0x8B;
+        file.Position = 0;
+        using Stream content = gzipped ? new GZipStream(file, CompressionMode.Decompress) : file;
+        using var reader = new StreamReader(content);
+        while (reader.ReadLine() is { Length: > 0 } line)
+        {
+            using var document = JsonDocument.Parse(line);
+            var record = document.RootElement;
+            if (shipTypeIds.Contains(record.GetProperty("typeID").GetInt32())
+                || !record.TryGetProperty("published", out var published) || !published.GetBoolean())
+            {
+                continue;
+            }
+
+            result.Add(record.GetProperty("name").EnumerateObject().ToDictionary(property => property.Name, property => property.Value.GetString() ?? string.Empty));
+        }
+
+        return result;
     }
 
     [Fact]
