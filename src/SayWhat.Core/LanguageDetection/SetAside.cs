@@ -7,11 +7,11 @@ public sealed record SetAsideResult(string Text, bool HasNoLetters);
 
 public static class SetAside
 {
-    private static readonly Regex InGameLink = new(
+    internal static readonly Regex InGameLink = new(
         @"<url=[^>]*>.*?</url>|<a\s[^>]*>.*?</a>",
         RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.CultureInvariant);
 
-    private static readonly Regex Url = new(
+    internal static readonly Regex Url = new(
         @"(?:https?://|www\.)\S+",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
