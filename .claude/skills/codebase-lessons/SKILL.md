@@ -26,3 +26,4 @@ metadata:
 - New code goes into the existing layer projects; `src/SayWhat.sln` does not change in PH-1. (WS-1.1)
 
 ### Gotchas
+- xUnit v3 reuses pool threads: assert "runs off the calling thread" with a blocking fake and an incomplete task, not thread ids. (WS-1.4)
