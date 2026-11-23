@@ -21,6 +21,8 @@ public class SolutionIntegrationTests
         ["xunit.runner.visualstudio"] = "4.0.1",
         ["Panlingo.LanguageIdentification.FastText"] = "0.8.1",
         ["Panlingo.LanguageIdentification.FastText.Native"] = "0.8.1",
+        ["Microsoft.ML.Tokenizers"] = "3.0.0",
+        ["Microsoft.ML.OnnxRuntime"] = "1.32.0",
     };
 
     private static readonly string[] RejectedPackagePrefixes =

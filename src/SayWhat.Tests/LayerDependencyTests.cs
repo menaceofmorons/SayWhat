@@ -44,7 +44,6 @@ public class LayerDependencyTests
 
     [Theory]
     [InlineData("SayWhat.Core")]
-    [InlineData("SayWhat.Engines")]
     [InlineData("SayWhat.Spike")]
     public void SourceProject_HasNoPackageReference(string project)
     {
@@ -57,6 +56,12 @@ public class LayerDependencyTests
         Assert.Equal(
             ["Panlingo.LanguageIdentification.FastText", "Panlingo.LanguageIdentification.FastText.Native"],
             PackageReferences("SayWhat.Platform.Windows"));
+    }
+
+    [Fact]
+    public void Engines_UseOnlyTheClearedTokeniserAndRuntime()
+    {
+        Assert.Equal(["Microsoft.ML.OnnxRuntime", "Microsoft.ML.Tokenizers"], PackageReferences("SayWhat.Engines"));
     }
 
     [Fact]
