@@ -33,15 +33,13 @@ metadata:
 - EVE chat log folders hold tens of thousands of files and each open costs ~5–30 ms: never open every file; filter by file name first, then read headers. (WS-1.2)
 - The EVE client holds its chat logs open for writing with write sharing allowed: detect a held log with a read open that denies write sharing, never a write open. (WS-1.2)
 - Adding a package reference also needs `SolutionIntegrationTests` (pinned package set) and `LayerDependencyTests` (which projects may hold packages) updated. (WS-1.3)
-
-### Dependencies
-- Inspect a NuGet package without a build: download `https://api.nuget.org/v3-flatcontainer/{id}/{version}/{id}.{version}.nupkg` and open it as a zip. (WS-1.3)
-- Panlingo fastText: `Predict(text, k, 0f)` with k above the label count returns every label, which allows a script-restricted top-1. (WS-1.3)
-
-### Gotchas
 - xUnit v3 reuses pool threads: assert "runs off the calling thread" with a blocking fake and an incomplete task, not thread ids. (WS-1.4)
 - Xenova Opus-MT `vocab.json` ids are per pair and differ from spm ids; map by piece string (`SentencePieceTokenizer.Vocabulary` gives piece → spm id). (WS-1.4)
 - Xenova merged decoder: step one needs `use_cache_branch=false` with zero-length past tensors; later steps take only `present.*.decoder.*` and keep `*.encoder.*` from step one; start token `<pad>` is excluded from argmax. (WS-1.4)
 - The Hugging Face API returns 401, not 404, for a repository that does not exist. (WS-1.4)
 - Opus-MT timings vary 5-20x on a busy or OneDrive-synced disk; measure on a quiet machine. (WS-1.4)
 - ONNX Runtime cache dims (heads, head size) come from `InferenceSession.InputMetadata` of `past_key_values.*`. (WS-1.4)
+
+### Dependencies
+- Inspect a NuGet package without a build: download `https://api.nuget.org/v3-flatcontainer/{id}/{version}/{id}.{version}.nupkg` and open it as a zip. (WS-1.3)
+- Panlingo fastText: `Predict(text, k, 0f)` with k above the label count returns every label, which allows a script-restricted top-1. (WS-1.3)
