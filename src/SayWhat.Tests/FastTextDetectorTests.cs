@@ -14,6 +14,17 @@ public class FastTextDetectorTests(FastTextModelFixture fixture) : IClassFixture
     }
 
     [Fact]
+    public void DisposedDetector_IsNotReadyAndReturnsUnknown()
+    {
+        var detector = new FastTextLanguageDetector(fixture.ModelPath);
+        detector.Dispose();
+
+        Assert.False(detector.IsReady);
+        Assert.True(detector.Detect("Hello there, how are you today").IsUnknown);
+        detector.Dispose();
+    }
+
+    [Fact]
     public void MissingModel_ReportsNotReadyAndReturnsUnknown()
     {
         using var detector = new FastTextLanguageDetector(Path.Combine(Path.GetTempPath(), "absent-" + Guid.NewGuid().ToString("N") + ".ftz"));

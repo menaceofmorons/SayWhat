@@ -9,7 +9,7 @@ public sealed class FastTextLanguageDetector : ILanguageDetector, IDisposable
     private const int PredictionCount = 200;
 
     private readonly object gate = new();
-    private readonly FastTextDetector? detector;
+    private FastTextDetector? detector;
 
     public FastTextLanguageDetector(string modelPath)
     {
@@ -30,12 +30,21 @@ public sealed class FastTextLanguageDetector : ILanguageDetector, IDisposable
         }
     }
 
-    public bool IsReady => detector is not null;
+    public bool IsReady
+    {
+        get
+        {
+            lock (gate)
+            {
+                return detector is not null;
+            }
+        }
+    }
 
     public DetectionResult Detect(string text)
     {
         var script = ScriptCheck.Check(text).DominantScript;
-        if (detector is null || string.IsNullOrWhiteSpace(text))
+        if (string.IsNullOrWhiteSpace(text))
         {
             return DetectionResult.Unknown(script);
         }
@@ -44,6 +53,11 @@ public sealed class FastTextLanguageDetector : ILanguageDetector, IDisposable
         var candidates = ScriptCandidates.For(script);
         lock (gate)
         {
+            if (detector is null)
+            {
+                return DetectionResult.Unknown(script);
+            }
+
             foreach (var prediction in detector.Predict(line, PredictionCount, 0f))
             {
                 var code = prediction.Label.StartsWith(LabelPrefix, StringComparison.Ordinal)
@@ -64,6 +78,7 @@ public sealed class FastTextLanguageDetector : ILanguageDetector, IDisposable
         lock (gate)
         {
             detector?.Dispose();
+            detector = null;
         }
     }
 }
