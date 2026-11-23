@@ -24,8 +24,8 @@ metadata:
 ### Conventions
 - xUnit v3 test projects declare `<Using Include="Xunit" />`; no `xunit3` template is installed, so create test projects by hand. (WS-1.1)
 - New code goes into the existing layer projects; `src/SayWhat.sln` does not change in PH-1. (WS-1.1)
-
 - xUnit v3 conditional skips need `Skip` (message) together with `SkipUnless` and `SkipType`. (WS-1.2)
 
 ### Gotchas
 - EVE chat log folders hold tens of thousands of files and each open costs ~5–30 ms: never open every file; filter by file name first, then read headers. (WS-1.2)
+- The EVE client holds its chat logs open for writing with write sharing allowed: detect a held log with a read open that denies write sharing, never a write open. (WS-1.2)
