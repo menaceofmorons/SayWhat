@@ -1,9 +1,10 @@
+using System.Text.RegularExpressions;
 using SayWhat.Core.Engines;
 using SayWhat.Core.Models;
 
 namespace SayWhat.Engines.Lite;
 
-public sealed class LiteEngine : IEngine
+public sealed partial class LiteEngine : IEngine
 {
     public const string SourceTokeniserFile = "source.spm";
     public const string TargetTokeniserFile = "target.spm";
@@ -164,8 +165,16 @@ public sealed class LiteEngine : IEngine
         }
     }
 
+    [GeneratedRegex("^[A-Za-z]{2,8}$")]
+    private static partial Regex LanguageCode();
+
     private async Task<IReadOnlyList<Leg>?> ResolveRoute(string source, string target, CancellationToken cancellation)
     {
+        if (source is null || target is null || !LanguageCode().IsMatch(source) || !LanguageCode().IsMatch(target))
+        {
+            return null;
+        }
+
         var direct = await ResolveLeg(new LanguagePair(source, target), cancellation).ConfigureAwait(false);
         if (direct is not null)
         {

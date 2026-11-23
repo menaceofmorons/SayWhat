@@ -11,7 +11,7 @@ public sealed class XenovaModelCatalogue(HttpClient client) : ILiteModelCatalogu
     public async Task<long?> FindSizeAsync(LanguagePair pair, CancellationToken cancellation)
     {
         using var response = await client.GetAsync(
-            string.Format(ListingUrl, pair.Source, pair.Target), cancellation).ConfigureAwait(false);
+            string.Format(ListingUrl, Uri.EscapeDataString(pair.Source), Uri.EscapeDataString(pair.Target)), cancellation).ConfigureAwait(false);
         if (response.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Unauthorized)
         {
             return null;
