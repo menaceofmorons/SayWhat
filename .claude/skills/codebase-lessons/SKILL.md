@@ -39,7 +39,7 @@ metadata:
 - `SdeImporter` enforces minimum row counts (100 ship types, 5000 systems); stubbed SDE tests need `SyntheticSde.Create(120, 5000)`. (WS-1.6)
 - SDE `types` records have no `categoryID`; ships are types whose `groupID` is in a `groups` row with `categoryID` 6. (WS-1.5)
 - The EVE client holds its chat logs open for writing with write sharing allowed: detect a held log with a read open that denies write sharing, never a write open. (WS-1.2)
-- Adding a package reference also needs `SolutionIntegrationTests` (pinned package set) and `LayerDependencyTests` (which projects may hold packages) updated. (WS-1.3)
+- Adding a package reference also needs `SolutionIntegrationTests` (pinned package set) and `LayerDependencyTests` (which projects may hold packages) updated; never remove or relax a layer rule. (WS-1.3)
 - xUnit v3 reuses pool threads: assert "runs off the calling thread" with a blocking fake and an incomplete task, not thread ids. (WS-1.4)
 - Xenova Opus-MT `vocab.json` ids are per pair and differ from spm ids; map by piece string (`SentencePieceTokenizer.Vocabulary` gives piece → spm id). (WS-1.4)
 - Xenova merged decoder: step one needs `use_cache_branch=false` with zero-length past tensors; later steps take only `present.*.decoder.*` and keep `*.encoder.*` from step one; start token `<pad>` is excluded from argmax. (WS-1.4)
