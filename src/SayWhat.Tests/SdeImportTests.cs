@@ -7,6 +7,7 @@ namespace SayWhat.Tests;
 public sealed class SdeImportTests : IDisposable
 {
     private const string ChildProcessVariable = "SAYWHAT_SDE_MEMORY_CHILD";
+    private static readonly TimeSpan ChildTimeout = TimeSpan.FromMinutes(2);
 
     private readonly string directory = Path.Combine(Path.GetTempPath(), "saywhat-sde-" + Guid.NewGuid().ToString("N"));
     private readonly SdeImportOptions small = new() { MinimumShipTypes = 3, MinimumSolarSystems = 3 };
@@ -121,35 +122,48 @@ public sealed class SdeImportTests : IDisposable
     [Fact]
     public void Import_StreamsTheTypesTableInBoundedMemory()
     {
+        var child = RunTestInChildProcess(nameof(Import_StreamsTheTypesTableInBoundedMemory_ChildProcess));
+
+        Assert.True(child.Exited, $"the measuring child process did not finish in {ChildTimeout.TotalMinutes} minutes");
+        Assert.True(child.ExitCode == 0, $"child process failed ({child.ExitCode}): {child.Output}");
+        Assert.Contains("Total: 1,", child.Output);
+        Assert.Contains("Failed: 0,", child.Output);
+        Assert.Contains("Skipped: 0,", child.Output);
+    }
+
+    private static ChildRun RunTestInChildProcess(string methodName)
+    {
         var executable = Path.Combine(AppContext.BaseDirectory, "SayWhat.Tests.exe");
+        var hasExecutable = File.Exists(executable);
         var start = new System.Diagnostics.ProcessStartInfo
         {
-            FileName = File.Exists(executable) ? executable : "dotnet",
+            FileName = hasExecutable ? executable : "dotnet",
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
         };
-        if (!File.Exists(executable))
+        if (!hasExecutable)
         {
             start.ArgumentList.Add(Path.Combine(AppContext.BaseDirectory, "SayWhat.Tests.dll"));
         }
 
         start.ArgumentList.Add("-method");
-        start.ArgumentList.Add($"{typeof(SdeImportTests).FullName}.{nameof(Import_StreamsTheTypesTableInBoundedMemory_ChildProcess)}");
+        start.ArgumentList.Add($"{typeof(SdeImportTests).FullName}.{methodName}");
         start.Environment[ChildProcessVariable] = "1";
 
         using var child = System.Diagnostics.Process.Start(start)!;
         var output = child.StandardOutput.ReadToEndAsync();
         var errors = child.StandardError.ReadToEndAsync();
-        var exited = child.WaitForExit(TimeSpan.FromMinutes(2));
+        var exited = child.WaitForExit(ChildTimeout);
         if (!exited)
         {
             child.Kill(entireProcessTree: true);
         }
 
-        Assert.True(exited, "the measuring child process did not finish in 2 minutes");
-        Assert.True(child.ExitCode == 0, $"child process failed ({child.ExitCode}): {output.Result}{errors.Result}");
+        return new ChildRun(exited, exited ? child.ExitCode : -1, output.Result + errors.Result);
     }
+
+    private sealed record ChildRun(bool Exited, int ExitCode, string Output);
 
     [Fact]
     public void Import_StreamsTheTypesTableInBoundedMemory_ChildProcess()
