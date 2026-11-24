@@ -30,21 +30,18 @@ public sealed record RestoreResult
 
 public static class TermProtector
 {
-    public const string TokenOpen = "⟦";
+    public const string TokenOpen = "[[";
 
-    public const string TokenClose = "⟧";
+    public const string TokenClose = "]]";
 
-    private static readonly string TokenLikePattern =
-        Regex.Escape(TokenOpen) + @"\s*\p{Nd}+\s*" + Regex.Escape(TokenClose);
+    private const string TokenLikePattern = @"(?:\[\s*){1,2}\p{Nd}+(?:\s*\]){1,2}";
 
     private static readonly Regex Protectable = new(
         SetAside.InGameLink.ToString() + "|" + SetAside.Url.ToString() + "|" + TokenLikePattern,
         RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.CultureInvariant);
 
     private static readonly Regex Token = new(
-        @"[⟦〚]\s*(?<n>\d+)\s*[⟧〛\]\)\}>】]"
-        + @"|[\[\(\{<【]\s*(?<n>\d+)\s*[⟧〛]"
-        + @"|\[\[\s*(?<n>\d+)\s*\]\]",
+        @"(?:[\[〚【]\s*){1,2}(?<n>\d+)(?:\s*[\]〛】]){1,2}",
         RegexOptions.CultureInvariant);
 
     private static readonly Regex CanonicalToken = new(
