@@ -24,7 +24,7 @@ public sealed class PrototypePipelineIntegrationTests : IAsyncLifetime
 
     private readonly string dir = Path.Combine(Path.GetTempPath(), "saywhat-proto-" + Guid.NewGuid().ToString("N"));
     private readonly FakeLogLockProbe probe = new();
-    private readonly StringWriter output = new();
+    private SynchronizedTestWriter output = new();
     private string? syntheticDatabase;
 
     public static bool LiveEnabled => Environment.GetEnvironmentVariable("SAYWHAT_RUN_INTEGRATION") == "1";
@@ -195,7 +195,7 @@ public sealed class PrototypePipelineIntegrationTests : IAsyncLifetime
     }
 
     private string[] PrintedLines() =>
-        output.ToString().Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries).Where(line => !line.StartsWith("[host]", StringComparison.Ordinal)).ToArray();
+        output.Snapshot().Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries).Where(line => !line.StartsWith("[host]", StringComparison.Ordinal)).ToArray();
 
     private void WaitForPrinted(int count)
     {
@@ -205,8 +205,8 @@ public sealed class PrototypePipelineIntegrationTests : IAsyncLifetime
 
     private void WaitForHost(string text)
     {
-        SpinWait.SpinUntil(() => output.ToString().Contains(text, StringComparison.Ordinal), Wait);
-        Assert.Contains(text, output.ToString());
+        SpinWait.SpinUntil(() => output.Snapshot().Contains(text, StringComparison.Ordinal), Wait);
+        Assert.Contains(text, output.Snapshot());
     }
 
     private async Task<int> EndSession(string path, Task<int> run)
@@ -215,9 +215,9 @@ public sealed class PrototypePipelineIntegrationTests : IAsyncLifetime
         return await run.WaitAsync(Wait);
     }
 
-    private static async Task<string> PrepareAssets(HttpClient client)
+    private async Task<string> PrepareAssets(HttpClient client)
     {
-        var models = Path.Combine(Path.GetTempPath(), "saywhat-proto-models-" + Guid.NewGuid().ToString("N"));
+        var models = Path.Combine(dir, "models");
         var prepare = new PrepareCommand(client, PrepareSources.Published, new StringWriter(), new StringWriter());
         var options = new PrepareOptions(models, "en", ["de"]);
         var code = await prepare.RunAsync(options, TestContext.Current.CancellationToken);
@@ -253,7 +253,7 @@ public sealed class PrototypePipelineIntegrationTests : IAsyncLifetime
         var code = await EndSession(path, run);
         Assert.Equal(0, code);
         var printed = PrintedLines();
-        output.GetStringBuilder().Clear();
+        output = new SynchronizedTestWriter();
         probe.Set(path, LogLockState.NotHeld);
         File.Delete(path);
         return printed;
