@@ -15,7 +15,7 @@ public sealed record DetectionOutcome(DetectionOutcomeKind Kind, string? Languag
     public static DetectionOutcome Unknown { get; } = new(DetectionOutcomeKind.Unknown, null, 0);
 }
 
-public static class LanguageDetection
+public static class DetectionRunner
 {
     public const double DefaultConfidenceCutoff = 0.5;
 

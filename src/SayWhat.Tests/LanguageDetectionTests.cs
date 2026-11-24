@@ -21,7 +21,7 @@ public class LanguageDetectionTests
     }
 
     private static DetectionOutcome Run(string text, StandInDetector detector, string target = "en", bool translation = true, string[]? ships = null) =>
-        LanguageDetection.Run(text, target, detector, translation, ships);
+        DetectionRunner.Run(text, target, detector, translation, ships);
 
     [Fact]
     public void BelowTheCutoff_IsUnknown()
@@ -34,7 +34,7 @@ public class LanguageDetectionTests
     [Fact]
     public void AtTheCutoff_CarriesTheLanguage()
     {
-        var outcome = Run("hello there friend", new StandInDetector("de", LanguageDetection.DefaultConfidenceCutoff));
+        var outcome = Run("hello there friend", new StandInDetector("de", DetectionRunner.DefaultConfidenceCutoff));
 
         Assert.Equal(new DetectionOutcome(DetectionOutcomeKind.Detected, "de", 0.5), outcome);
     }
