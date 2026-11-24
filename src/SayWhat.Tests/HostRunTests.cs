@@ -21,7 +21,7 @@ public sealed class HostRunTests : IDisposable
 
     private readonly string dir = Path.Combine(Path.GetTempPath(), "saywhat-hostrun-" + Guid.NewGuid().ToString("N"));
     private readonly FakeLogLockProbe probe = new();
-    private readonly StringWriter output = new();
+    private readonly SynchronizedTestWriter output = new();
     private readonly StubDetector detector = new();
     private readonly StubEngine engine = new();
 
@@ -51,10 +51,10 @@ public sealed class HostRunTests : IDisposable
 
     private static string Line(string speaker, string text) => $"[ 2026.11.24 10:00:00 ] {speaker} > {text}\r\n";
 
-    private string CreateLocal(string encodingName, string listener = "Pilot One")
+    private string CreateLocal(string encodingName, string listener = "Pilot One", string fileName = "Local_20261124_090000_1.txt")
     {
         var header = string.Join("\r\n", Rule, "  Channel ID:      local", "  Channel Name:    Local", $"  Listener:        {listener}", "  Session started: 2026.11.24 09:00:00", Rule) + "\r\n";
-        var path = Path.Combine(dir, "Local_20261124_090000_1.txt");
+        var path = Path.Combine(dir, fileName);
         File.WriteAllBytes(path, Encode(header + Line("Other", "backlog line"), encodingName));
         probe.Set(path, LogLockState.Held);
         return path;
@@ -79,7 +79,7 @@ public sealed class HostRunTests : IDisposable
         new(null, HostRunOptions.DefaultChannel, "en", translation);
 
     private string[] PrintedLines() =>
-        output.ToString().Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries).Where(line => !line.StartsWith("[host]", StringComparison.Ordinal)).ToArray();
+        output.Snapshot().Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries).Where(line => !line.StartsWith("[host]", StringComparison.Ordinal)).ToArray();
 
     private void WaitForPrinted(int count)
     {
@@ -89,8 +89,8 @@ public sealed class HostRunTests : IDisposable
 
     private void WaitForHost(string text)
     {
-        SpinWait.SpinUntil(() => output.ToString().Contains(text, StringComparison.Ordinal), Wait);
-        Assert.Contains(text, output.ToString());
+        SpinWait.SpinUntil(() => output.Snapshot().Contains(text, StringComparison.Ordinal), Wait);
+        Assert.Contains(text, output.Snapshot());
     }
 
     private async Task<int> EndSession(string path, Task<int> run)
@@ -226,7 +226,57 @@ public sealed class HostRunTests : IDisposable
         var code = await Start().WaitAsync(Wait);
 
         Assert.Equal(1, code);
-        Assert.Contains("no live EVE pilot", output.ToString());
+        Assert.Contains("no live EVE pilot", output.Snapshot());
+    }
+
+    [Fact]
+    public async Task SeveralLivePilotsStopWithAListAndExitOne()
+    {
+        CreateLocal("utf8bom");
+        CreateLocal("utf8bom", "Pilot Two", "Local_20261124_090000_2.txt");
+
+        var code = await Start().WaitAsync(Wait);
+
+        Assert.Equal(1, code);
+        Assert.Contains("[host] several live pilots: Pilot One, Pilot Two; pass --pilot", output.Snapshot());
+    }
+
+    [Fact]
+    public async Task UnparseableLinePrintsAHostWarning()
+    {
+        var path = CreateLocal("utf16le");
+        var run = Start();
+        WaitForHost("following");
+
+        Append(path, "utf16le", "garbage without a timestamp\r\n");
+        WaitForHost("[host] warning LineUnparseable line ");
+        await EndSession(path, run);
+    }
+
+    [Fact]
+    public async Task ThrowingEnginePrintsAHostFault()
+    {
+        engine.ThrowOnTranslate = true;
+        var path = CreateLocal("utf16le");
+        var run = Start();
+        WaitForHost("following");
+
+        Append(path, "utf16le", Line("Other", Russian));
+        WaitForHost("[host] fault TranslateStage InvalidOperationException");
+        await EndSession(path, run);
+    }
+
+    [Fact]
+    public async Task ThrowingDetectorPrintsAHostFault()
+    {
+        detector.ThrowOnDetect = true;
+        var path = CreateLocal("utf16le");
+        var run = Start();
+        WaitForHost("following");
+
+        Append(path, "utf16le", Line("Other", Russian));
+        WaitForHost("[host] fault PipelineFront InvalidOperationException");
+        await EndSession(path, run);
     }
 
     [Fact]
@@ -237,7 +287,7 @@ public sealed class HostRunTests : IDisposable
         var code = await Start(new HostRunOptions("Nobody", HostRunOptions.DefaultChannel, "en", true)).WaitAsync(Wait);
 
         Assert.Equal(1, code);
-        Assert.Contains("Nobody is not live", output.ToString());
+        Assert.Contains("Nobody is not live", output.Snapshot());
     }
 
     [Fact]
@@ -313,8 +363,15 @@ public sealed class HostRunTests : IDisposable
 
         public bool IsReady => true;
 
+        public bool ThrowOnDetect { get; set; }
+
         public DetectionResult Detect(string text)
         {
+            if (ThrowOnDetect)
+            {
+                throw new InvalidOperationException();
+            }
+
             if (text.Contains("zzz", StringComparison.Ordinal))
             {
                 return new DetectionResult("ru", 0.1, TextScript.Latin);
@@ -336,6 +393,8 @@ public sealed class HostRunTests : IDisposable
         private int releaseCalls;
 
         public EngineErrorCategory? FailWith { get; set; }
+
+        public bool ThrowOnTranslate { get; set; }
 
         public int TranslateCalls => Volatile.Read(ref translateCalls);
 
@@ -365,6 +424,11 @@ public sealed class HostRunTests : IDisposable
         public async Task<TranslationResult> Translate(string protectedText, string sourceLanguage, string targetLanguage, CancellationToken cancellation)
         {
             Interlocked.Increment(ref translateCalls);
+            if (ThrowOnTranslate)
+            {
+                throw new InvalidOperationException();
+            }
+
             Task? pending;
             lock (gate)
             {
