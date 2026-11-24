@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Text;
+using System.Text.RegularExpressions;
 using SayWhat.Core.LanguageDetection;
 using SayWhat.Core.ReferenceData;
 
@@ -11,7 +12,9 @@ internal static class NameProtection
 {
     internal const int MinimumUnspacedLength = 4;
 
-    private static readonly ConditionalWeakTable<ReferenceDatabase, NameIndex> Indexes = new();
+    private static readonly ConditionalWeakTable<ReferenceDatabase, IndexHolder> Indexes = new();
+
+    private static readonly Regex Token = new(Regex.Escape(TermProtector.TokenOpen) + @"\d+" + Regex.Escape(TermProtector.TokenClose), RegexOptions.CultureInvariant);
 
     public static string Apply(string text, string sourceLanguage, string targetLanguage, ReferenceDatabase reference, string shipNameLanguage, Func<string, string> addItem, int minimumUnspacedLength = MinimumUnspacedLength)
     {
@@ -20,12 +23,12 @@ internal static class NameProtection
             return text;
         }
 
-        var index = Indexes.GetValue(reference, database => new NameIndex(database));
-        var withShips = ReplaceShips(text, sourceLanguage, targetLanguage, shipNameLanguage, reference, index, addItem);
+        var index = Indexes.GetValue(reference, _ => new IndexHolder()).Current(reference);
+        var withShips = ReplaceShips(text, sourceLanguage, targetLanguage, shipNameLanguage, index, addItem);
         return ReplaceSystems(withShips, index, addItem, minimumUnspacedLength);
     }
 
-    private static string ReplaceShips(string text, string sourceLanguage, string targetLanguage, string shipNameLanguage, ReferenceDatabase reference, NameIndex index, Func<string, string> addItem)
+    private static string ReplaceShips(string text, string sourceLanguage, string targetLanguage, string shipNameLanguage, NameIndex index, Func<string, string> addItem)
     {
         var ships = index.Ships(sourceLanguage);
         if (ships is null)
@@ -37,7 +40,7 @@ internal static class NameProtection
         return ships.Matcher.Replace(text, matched =>
         {
             var replacement = ships.TypeIds.TryGetValue(NameNormaliser.Normalise(matched), out var typeId)
-                ? reference.ShipName(typeId, outputLanguage)
+                ? index.ShipName(typeId, outputLanguage)
                 : null;
             return addItem(replacement ?? matched);
         });
@@ -56,21 +59,14 @@ internal static class NameProtection
         var longest = index.LongestSystemName;
         var builder = new StringBuilder(text.Length);
         var position = 0;
-        while (position < text.Length)
+        foreach (var token in Token.Matches(text).Cast<Match>())
         {
-            var open = text.IndexOf(TermProtector.TokenOpen, position, StringComparison.Ordinal);
-            var segmentEnd = open < 0 ? text.Length : open;
-            ScanSegment(text.AsSpan(position, segmentEnd - position), lookup, koLookup, longest, minimumUnspacedLength, addItem, builder);
-            if (open < 0)
-            {
-                break;
-            }
-
-            var close = text.IndexOf(TermProtector.TokenClose, open, StringComparison.Ordinal);
-            var end = close < 0 ? text.Length : close + TermProtector.TokenClose.Length;
-            builder.Append(text, open, end - open);
-            position = end;
+            ScanSegment(text.AsSpan(position, token.Index - position), lookup, koLookup, longest, minimumUnspacedLength, addItem, builder);
+            builder.Append(token.Value);
+            position = token.Index + token.Length;
         }
+
+        ScanSegment(text.AsSpan(position), lookup, koLookup, longest, minimumUnspacedLength, addItem, builder);
 
         return builder.ToString();
     }
@@ -108,7 +104,7 @@ internal static class NameProtection
             var candidate = segment.Slice(start, length);
             if (end < segment.Length && blocks(segment[end]))
             {
-                var koreanParticle = length >= minimumUnspacedLength && IsHangul(segment[end]) && !IsNonHangulBlocker(segment[end]);
+                var koreanParticle = length >= minimumUnspacedLength && IsHangul(segment[end]);
                 if (!koreanParticle || !koLookup.Contains(candidate))
                 {
                     continue;
@@ -128,8 +124,6 @@ internal static class NameProtection
 
     private static bool IsHangul(char c) => c is >= 'ᄀ' and <= 'ᇿ' or >= '㄰' and <= '㆏' or >= '가' and <= '힣';
 
-    private static bool IsNonHangulBlocker(char c) => IsWordChar(c) && !IsHangul(c);
-
     private static bool IsUnspacedScript(char c) => c is >= '぀' and <= 'ヿ' or >= '一' and <= '鿿';
 
     private static bool IsWordChar(char c) =>
@@ -139,10 +133,34 @@ internal static class NameProtection
 
     private sealed record ShipIndex(ShipNameMatcher Matcher, Dictionary<string, int> TypeIds);
 
+    private sealed class IndexHolder
+    {
+        private readonly object gate = new();
+        private (DateTime WriteTime, long Length)? stamp;
+        private NameIndex? index;
+
+        public NameIndex Current(ReferenceDatabase reference)
+        {
+            var file = new FileInfo(reference.Path);
+            var current = (file.LastWriteTimeUtc, file.Length);
+            lock (gate)
+            {
+                if (index is null || stamp != current)
+                {
+                    index = new NameIndex(reference);
+                    stamp = current;
+                }
+
+                return index;
+            }
+        }
+    }
+
     private sealed class NameIndex
     {
         private readonly ReferenceDatabase reference;
         private readonly ConcurrentDictionary<string, ShipIndex?> ships = new();
+        private readonly ConcurrentDictionary<string, Dictionary<int, string>> shipNamesByType = new();
         private readonly Lazy<IReadOnlyList<string>> clientLanguages;
         private readonly Lazy<HashSet<string>> systemNames;
         private readonly Lazy<int> longestSystemName;
@@ -166,6 +184,20 @@ internal static class NameProtection
         public bool IsClientLanguage(string language) => clientLanguages.Value.Contains(language, StringComparer.Ordinal);
 
         public ShipIndex? Ships(string language) => ships.GetOrAdd(language, BuildShips);
+
+        public string? ShipName(int typeId, string language) =>
+            shipNamesByType.GetOrAdd(language, BuildShipNamesByType).GetValueOrDefault(typeId);
+
+        private Dictionary<int, string> BuildShipNamesByType(string language)
+        {
+            var names = new Dictionary<int, string>();
+            foreach (var entry in reference.ShipNames(language))
+            {
+                names.TryAdd(entry.TypeId, entry.Name);
+            }
+
+            return names;
+        }
 
         private ShipIndex? BuildShips(string language)
         {
