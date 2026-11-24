@@ -292,6 +292,42 @@ public sealed class NameProtectionTests : IDisposable
     }
 
     [Fact]
+    public void SystemNameInsideBracketsThatAreNotATokenIsProtected()
+    {
+        Assert.Equal("[[[[0]]]]", TermProtector.Protect("[[Jita]]", "en", "de", database).Text);
+        Assert.Equal("[[ [[0]]", TermProtector.Protect("[[ Jita", "en", "de", database).Text);
+    }
+
+    [Fact]
+    public void ReimportedDatabaseServesTheNewNamesThroughTheSameInstance()
+    {
+        Assert.Equal("[[0]] ok", TermProtector.Protect("Jita ok", "en", "de", database).Text);
+        Assert.Equal("[[0]] ok", TermProtector.Protect("Rifter ok", "en", "fr", database).Text);
+
+        var sde = SyntheticSde.Create();
+        sde.Set(
+            "types",
+            false,
+            SyntheticSde.ShipLine(600, 25, code => code == "en" ? "Merlin" : $"Merlin-{code}"),
+            SyntheticSde.ShipLine(601, 25, code => $"Other-{code}"),
+            SyntheticSde.ShipLine(602, 25, code => $"Third-{code}"));
+        sde.Set(
+            "mapSolarSystems",
+            false,
+            System(30000001, code => "Amarrington"),
+            System(30000002, code => "Dodixie"),
+            System(30000003, code => "Rens"));
+        new SdeImporter(sde, new SdeImportOptions { MinimumShipTypes = 3, MinimumSolarSystems = 3 }).Import(database.Path);
+
+        Assert.Equal("Jita ok", TermProtector.Protect("Jita ok", "en", "de", database).Text);
+        Assert.Equal("Rifter ok", TermProtector.Protect("Rifter ok", "en", "fr", database).Text);
+        Assert.Equal("[[0]] ok", TermProtector.Protect("Dodixie ok", "en", "de", database).Text);
+        var merlin = TermProtector.Protect("Merlin ok", "en", "fr", database);
+        Assert.Equal("[[0]] ok", merlin.Text);
+        Assert.Equal(["Merlin-fr"], merlin.Items);
+    }
+
+    [Fact]
     public void MultiWordSystemNameInsideALongerNameIsNotProtected()
     {
         Assert.Equal("NewEden Neu Edenx", TermProtector.Protect("NewEden Neu Edenx", "de", "en", database).Text);
