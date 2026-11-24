@@ -31,6 +31,7 @@ public sealed class SdeImporter
         try
         {
             var result = Build(pendingPath, cancellationToken);
+            FlushToDisk(pendingPath);
             File.Move(pendingPath, databasePath, overwrite: true);
             return result;
         }
@@ -311,6 +312,12 @@ public sealed class SdeImporter
         using var command = connection.CreateCommand();
         command.CommandText = sql;
         command.ExecuteNonQuery();
+    }
+
+    private static void FlushToDisk(string path)
+    {
+        using var file = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite);
+        file.Flush(flushToDisk: true);
     }
 
     private static void DeleteIfPresent(string path)
