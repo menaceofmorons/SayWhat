@@ -3,6 +3,7 @@ namespace SayWhat.Spike;
 public static class SpikeHost
 {
     private const string PrepareName = "prepare";
+    private const string RunName = "run";
 
     public static int Run(string[] args)
     {
@@ -11,7 +12,23 @@ public static class SpikeHost
             return RunPrepare(args[1..]);
         }
 
+        if (args.Length > 0 && args[0] == RunName)
+        {
+            return RunHost(args[1..]);
+        }
+
         return 0;
+    }
+
+    private static int RunHost(string[] args)
+    {
+        using var stop = new CancellationTokenSource();
+        Console.CancelKeyPress += (_, eventArgs) =>
+        {
+            eventArgs.Cancel = true;
+            stop.Cancel();
+        };
+        return RunCommand.Execute(args, Console.Out, Console.Error, stop.Token);
     }
 
     // TEMP: spike-only asset download; remove when the PH-2 Download Manager is in place.
