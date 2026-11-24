@@ -183,7 +183,25 @@ public sealed class PipelineFrontTests : IDisposable
         var fault = Assert.Single(faults);
         Assert.Equal(PipelineFront.Component, fault.Component);
         Assert.Equal(nameof(InvalidOperationException), fault.ExceptionType);
-        Assert.Equal(2, Assert.Single(store.Snapshot()).LineId.Sequence);
+        var lines = store.Snapshot();
+        Assert.Equal([1, 2], lines.Select(line => line.LineId.Sequence));
+        Assert.Equal(LineState.LanguageUnknown, lines[0].State);
+        Assert.Equal(LineState.Pending, lines[1].State);
+    }
+
+    [Fact]
+    public async Task HandOffFaultFailsTheStrandedPendingLine()
+    {
+        detector.Result = new DetectionResult("ru", 0.9, TextScript.Cyrillic);
+        var faults = new List<SessionFault>();
+        var front = new PipelineFront(store, detector, database, "en", true, _ => throw new InvalidOperationException("hand-off"), new FixedClock());
+        front.Faulted += faults.Add;
+
+        front.Submit(Parsed(1, Russian));
+        await front.DisposeAsync();
+
+        Assert.Single(faults);
+        Assert.Equal(LineState.Failed, Assert.Single(store.Snapshot()).State);
     }
 
     [Fact]
