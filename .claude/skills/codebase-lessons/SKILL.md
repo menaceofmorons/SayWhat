@@ -29,6 +29,7 @@ metadata:
 - New code goes into the existing layer projects; `src/SayWhat.sln` does not change in PH-1. (WS-1.1)
 - xUnit v3 console output under Microsoft.Testing.Platform is not shown by `dotnet test`; write measurement output to a file named by an env var. (WS-1.5)
 - `TextWriter.Synchronized` makes each `WriteLine` atomic, enough to interleave printer lines and host messages on one writer. (WS-1.6)
+- The xUnit v3 test project is an exe: `SayWhat.Tests.exe -method {Class}.{Method}` runs one test in its own process, for measurements other tests' allocation would disturb. (WS-1.Integration)
 - xUnit v3 conditional skips need `Skip` (message) together with `SkipUnless` and `SkipType`. (WS-1.2)
 
 ### Gotchas
