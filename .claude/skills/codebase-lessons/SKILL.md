@@ -45,6 +45,7 @@ metadata:
 - Xenova merged decoder: step one needs `use_cache_branch=false` with zero-length past tensors; later steps take only `present.*.decoder.*` and keep `*.encoder.*` from step one; start token `<pad>` is excluded from argmax. (WS-1.4)
 - The Hugging Face API returns 401, not 404, for a repository that does not exist. (WS-1.4)
 - Opus-MT timings vary 5-20x on a busy or OneDrive-synced disk; measure on a quiet machine. (WS-1.4)
+- The Lite engine uses a published direct pair before pivoting; to exercise a pivot pick a pair with no published model (e.g. `ko` to `de`). (WS-1.Integration)
 - ONNX Runtime cache dims (heads, head size) come from `InferenceSession.InputMetadata` of `past_key_values.*`. (WS-1.4)
 - `Environment.SpecialFolder.MyDocuments` ignores `USERPROFILE`: to run the host over a temp Documents tree, use `new WindowsEveLogFolder(() => tempRoot)` with `HostRun`, not the `run` command. (WS-1.Integration)
 
