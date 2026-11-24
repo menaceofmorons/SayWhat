@@ -91,24 +91,41 @@ public sealed class PrepareCommandTests : IDisposable
     }
 
     [Fact]
-    public async Task Run_PartialFileNeverReplacesAGoodOne()
+    public async Task Run_TruncatedDownloadLeavesExistingFileIntactAndNoPartial()
     {
         Directory.CreateDirectory(root);
         File.WriteAllText(Path.Combine(root, PrepareCommand.ReferenceDatabaseFile), "existing");
-        var detector = Path.Combine(root, PrepareCommand.DetectorFile);
-        var handler = new StubHandler { Truncate = url => url.Contains("detector.test", StringComparison.Ordinal) };
+        File.WriteAllText(Path.Combine(root, PrepareCommand.DetectorFile), "existing");
+        var target = Path.Combine(root, "lite", "de-en", LiteEngine.EncoderFile);
+        Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+        File.WriteAllText(target, "old");
+        var handler = new StubHandler { Truncate = url => url.EndsWith(LiteEngine.EncoderFile, StringComparison.Ordinal) };
 
         var code = await Command(handler).RunAsync(Options(), TestContext.Current.CancellationToken);
 
         Assert.Equal(1, code);
+        Assert.Contains("ended after", error.ToString(), StringComparison.Ordinal);
+        Assert.Equal("old", File.ReadAllText(target));
+        Assert.Empty(Directory.EnumerateFiles(root, "*.partial", SearchOption.AllDirectories));
+    }
+
+    [Fact]
+    public async Task Run_TruncatedDetectorDownloadLeavesNoFileThenRetrySucceeds()
+    {
+        Directory.CreateDirectory(root);
+        File.WriteAllText(Path.Combine(root, PrepareCommand.ReferenceDatabaseFile), "existing");
+        var detector = Path.Combine(root, PrepareCommand.DetectorFile);
+
+        var failed = await Command(new StubHandler { Truncate = url => url.Contains("detector.test", StringComparison.Ordinal) }).RunAsync(Options(), TestContext.Current.CancellationToken);
+
+        Assert.Equal(1, failed);
         Assert.False(File.Exists(detector));
         Assert.False(File.Exists(detector + ".partial"));
 
-        File.WriteAllText(detector, "good");
-        var retry = await Command(handler).RunAsync(Options(), TestContext.Current.CancellationToken);
+        var retry = await Command(new StubHandler()).RunAsync(Options(), TestContext.Current.CancellationToken);
 
         Assert.Equal(0, retry);
-        Assert.Equal("good", File.ReadAllText(detector));
+        Assert.Equal("detector", File.ReadAllText(detector));
     }
 
     [Fact]
@@ -127,9 +144,21 @@ public sealed class PrepareCommandTests : IDisposable
     }
 
     [Fact]
-    public async Task Run_FailedSdeImportKeepsThePreviousDatabase()
+    public async Task Run_FailedSdeImportLeavesNoDatabaseAndNoWorkFolder()
     {
         var handler = new StubHandler { SdeShips = 1 };
+
+        var code = await Command(handler).RunAsync(Options(), TestContext.Current.CancellationToken);
+
+        Assert.Equal(1, code);
+        Assert.False(File.Exists(Path.Combine(root, PrepareCommand.ReferenceDatabaseFile)));
+        Assert.False(Directory.Exists(Path.Combine(root, "sde-work")));
+    }
+
+    [Fact]
+    public async Task Run_FailedSdeDownloadLeavesNoDatabaseAndNoWorkFolder()
+    {
+        var handler = new StubHandler { Fail = url => url.Contains("sde.test", StringComparison.Ordinal) };
 
         var code = await Command(handler).RunAsync(Options(), TestContext.Current.CancellationToken);
 
