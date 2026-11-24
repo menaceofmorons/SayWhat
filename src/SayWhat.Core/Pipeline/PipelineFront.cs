@@ -92,8 +92,27 @@ public sealed class PipelineFront : IAsyncDisposable
             }
             catch (Exception exception)
             {
+                Recover(parsed);
                 RaiseFault(exception);
             }
+        }
+    }
+
+    private void Recover(ParsedLine parsed)
+    {
+        try
+        {
+            if (!store.TryGet(parsed.LineId, out _))
+            {
+                store.Add(Line.FromParsed(parsed, LineState.LanguageUnknown));
+                return;
+            }
+
+            store.Update(parsed.LineId, line => line.State == LineState.Pending ? line with { State = LineState.Failed } : line);
+        }
+        catch (Exception)
+        {
+            return;
         }
     }
 
