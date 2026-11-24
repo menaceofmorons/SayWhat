@@ -32,7 +32,7 @@ public class TermProtectionTests
     {
         var line = TermProtector.Protect("go https://a.b/c <url=x>Y</url> 7", "en", "de");
 
-        Assert.Equal("go ⟦0⟧ ⟦1⟧ 7", line.Text);
+        Assert.Equal("go [[0]] [[1]] 7", line.Text);
         Assert.Equal(["https://a.b/c", "<url=x>Y</url>"], line.Items);
         Assert.Equal(["7"], line.DigitSequences);
     }
@@ -42,15 +42,15 @@ public class TermProtectionTests
     {
         var line = TermProtector.Protect("https://a.b/c", "en", "de");
 
-        Assert.Equal("⟦0⟧", line.Text);
-        Assert.Equal("https://a.b/c", TermProtector.Restore(line, "⟦0⟧").Text);
+        Assert.Equal("[[0]]", line.Text);
+        Assert.Equal("https://a.b/c", TermProtector.Restore(line, "[[0]]").Text);
     }
 
     [Fact]
     public void AdjacentTokensRestore()
     {
         var line = TermProtector.Protect("https://a.b <url=x>Y</url>", "en", "de");
-        var result = TermProtector.Restore(line, "⟦1⟧⟦0⟧");
+        var result = TermProtector.Restore(line, "[[1]][[0]]");
 
         Assert.Equal("<url=x>Y</url>https://a.b", result.Text);
     }
@@ -59,19 +59,20 @@ public class TermProtectionTests
     public void ReorderedTokensRestoreByIndex()
     {
         var line = TermProtector.Protect("a https://one.x b https://two.x", "en", "de");
-        var result = TermProtector.Restore(line, "b' ⟦1⟧ a' ⟦0⟧");
+        var result = TermProtector.Restore(line, "b' [[1]] a' [[0]]");
 
         Assert.Equal("b' https://two.x a' https://one.x", result.Text);
     }
 
     [Theory]
-    [InlineData("hallo ⟦ 0 ⟧ welt")]
-    [InlineData("hallo ⟦0] welt")]
-    [InlineData("hallo [0⟧ welt")]
+    [InlineData("hallo [[ 0 ]] welt")]
+    [InlineData("hallo [[0] welt")]
+    [InlineData("hallo [0]] welt")]
+    [InlineData("hallo [0] welt")]
+    [InlineData("hallo [ [0] ] welt")]
+    [InlineData("hallo [ 0 ] welt")]
     [InlineData("hallo 〚0〛 welt")]
-    [InlineData("hallo [[0]] welt")]
-    [InlineData("hallo ⟦0) welt")]
-    [InlineData("hallo ⟦  0⟧ welt")]
+    [InlineData("hallo [[  0]] welt")]
     public void DamagedTokenIsRepaired(string reply)
     {
         var line = TermProtector.Protect("hello https://a.b world", "en", "de");
@@ -79,6 +80,41 @@ public class TermProtectionTests
 
         Assert.True(result.IsSuccess);
         Assert.Equal("hallo https://a.b welt", result.Text);
+    }
+
+    [Theory]
+    [InlineData("hallo 0 welt")]
+    [InlineData("hallo [[0) welt")]
+    [InlineData("hallo [[ welt")]
+    [InlineData("hallo [[x]] welt")]
+    public void BareDigitOrUnrecognisableDamageIsBadResponse(string reply)
+    {
+        var line = TermProtector.Protect("hello https://a.b world", "en", "de");
+
+        Assert.Equal(EngineErrorCategory.BadResponse, TermProtector.Restore(line, reply).Error!.Category);
+    }
+
+    [Theory]
+    [InlineData("hallo [[0]] [0] welt")]
+    [InlineData("hallo [0] [[0]] welt")]
+    [InlineData("hallo [[0]] [[5]] welt")]
+    public void DuplicatedOrUnknownDamagedIndexIsBadResponse(string reply)
+    {
+        var line = TermProtector.Protect("hello https://a.b world", "en", "de");
+
+        Assert.False(TermProtector.Restore(line, reply).IsSuccess);
+    }
+
+    [Theory]
+    [InlineData("pick [3] or [[7]] now")]
+    [InlineData("pick [ 3 ] and [[ 7 ]] and [[7] 5")]
+    public void RealTokenLookingTextIsProtectedAndRestoredVerbatim(string text)
+    {
+        var line = TermProtector.Protect(text, "en", "de");
+
+        Assert.NotEmpty(line.Items);
+        Assert.DoesNotContain("[3]", line.Text);
+        Assert.Equal(text, TermProtector.Restore(line, line.Text).Text);
     }
 
     [Fact]
@@ -105,8 +141,8 @@ public class TermProtectionTests
     {
         var line = TermProtector.Protect("hello https://a.b world", "en", "de");
 
-        Assert.False(TermProtector.Restore(line, "⟦0⟧ ⟦0⟧").IsSuccess);
-        Assert.False(TermProtector.Restore(line, "⟦0⟧ ⟦5⟧").IsSuccess);
+        Assert.False(TermProtector.Restore(line, "[[0]] [[0]]").IsSuccess);
+        Assert.False(TermProtector.Restore(line, "[[0]] [[5]]").IsSuccess);
     }
 
     [Fact]
@@ -133,13 +169,13 @@ public class TermProtectionTests
         var line = TermProtector.Protect("see https://a.b/123 for 5", "en", "de");
 
         Assert.Equal(["5"], line.DigitSequences);
-        Assert.Equal("siehe https://a.b/123 für 5", TermProtector.Restore(line, "siehe ⟦0⟧ für 5").Text);
+        Assert.Equal("siehe https://a.b/123 für 5", TermProtector.Restore(line, "siehe [[0]] für 5").Text);
     }
 
     [Fact]
     public void TextAlreadyContainingTokenLikeCharactersIsPreserved()
     {
-        var text = "weird ⟦0⟧ and ⟦ 7 ⟧ with https://a.b";
+        var text = "weird [[0]] and [[ 7 ]] with https://a.b";
         var line = TermProtector.Protect(text, "en", "de");
 
         Assert.Equal(3, line.Items.Count);
@@ -149,7 +185,7 @@ public class TermProtectionTests
     [Fact]
     public void TokenFormIsOneConstant()
     {
-        Assert.Equal("⟦3⟧", TermProtector.FormatToken(3));
+        Assert.Equal("[[3]]", TermProtector.FormatToken(3));
         Assert.Equal(TermProtector.TokenOpen + "0" + TermProtector.TokenClose, TermProtector.Protect("www.a.b", "en", "de").Text);
     }
 }

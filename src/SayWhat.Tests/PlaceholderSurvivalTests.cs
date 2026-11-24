@@ -15,8 +15,7 @@ public class PlaceholderSurvivalTests
 
     private static readonly TokenForm[] Forms =
     [
-        new("canonical", i => $"⟦{i}⟧", "⟦"),
-        new("double-square", i => $"[[{i}]]", "[["),
+        new("canonical", TermProtector.FormatToken, "[["),
         new("angle", i => $"<{i}>", "<"),
         new("at-sign", i => $"@{i}@", "@"),
     ];
@@ -128,7 +127,7 @@ public class PlaceholderSurvivalTests
     [Fact]
     public void Intact_tokens_in_order_are_intact()
     {
-        var outcome = Classify(Forms[0], 2, "Hallo ⟦0⟧ und ⟦1⟧.", []);
+        var outcome = Classify(Forms[0], 2, "Hallo [[0]] und [[1]].", []);
         Assert.Equal([TokenState.Intact, TokenState.Intact], outcome.Tokens);
         Assert.False(outcome.Reordered);
     }
@@ -136,7 +135,7 @@ public class PlaceholderSurvivalTests
     [Fact]
     public void Reordered_tokens_are_flagged_but_intact()
     {
-        var outcome = Classify(Forms[0], 2, "⟦1⟧ vor ⟦0⟧", []);
+        var outcome = Classify(Forms[0], 2, "[[1]] vor [[0]]", []);
         Assert.Equal([TokenState.Intact, TokenState.Intact], outcome.Tokens);
         Assert.True(outcome.Reordered);
     }
@@ -144,31 +143,32 @@ public class PlaceholderSurvivalTests
     [Fact]
     public void Dropped_duplicated_and_bracket_changes_are_classified()
     {
-        var outcome = Classify(Forms[0], 4, "a ⟦0⟧ ⟦0⟧ b [1] c", []);
+        var outcome = Classify(Forms[0], 4, "a [[0]] [[0]] b [1] c", []);
         Assert.Equal([TokenState.Duplicated, TokenState.ChangedBrackets, TokenState.Dropped, TokenState.Dropped], outcome.Tokens);
     }
 
     [Fact]
     public void Translated_token_is_classified()
     {
-        var outcome = Classify(Forms[0], 1, "a ⟦null⟧ b", []);
+        var outcome = Classify(Forms[0], 1, "a [[null]] b", []);
         Assert.Equal([TokenState.Translated], outcome.Tokens);
     }
 
     [Fact]
     public void Digit_sequences_are_compared_outside_tokens()
     {
-        Assert.True(Classify(Forms[2], 1, "<0> 12 minutes", ["12"]).DigitsIntact);
-        Assert.False(Classify(Forms[2], 1, "<0> 13 minutes", ["12"]).DigitsIntact);
+        Assert.True(Classify(Forms[1], 1, "<0> 12 minutes", ["12"]).DigitsIntact);
+        Assert.False(Classify(Forms[1], 1, "<0> 13 minutes", ["12"]).DigitsIntact);
     }
 
     [Fact]
     public void Canonical_damage_is_repaired_by_restore()
     {
-        var line = new ProtectedLine("⟦0⟧ and ⟦1⟧", ["Jita", "Rifter"], []);
-        Assert.True(TermProtector.Restore(line, "Jita ⟦0] und ⟦1⟧").IsSuccess);
-        Assert.False(TermProtector.Restore(line, "Jita [0] und ⟦1⟧").IsSuccess);
-        Assert.False(TermProtector.Restore(line, "⟦0⟧ nur").IsSuccess);
+        var line = new ProtectedLine("[[0]] and [[1]]", ["Jita", "Rifter"], []);
+        Assert.True(TermProtector.Restore(line, "Jita [[0] und [[1]]").IsSuccess);
+        Assert.True(TermProtector.Restore(line, "Jita [0] und [[1]]").IsSuccess);
+        Assert.False(TermProtector.Restore(line, "Jita 0 und [[1]]").IsSuccess);
+        Assert.False(TermProtector.Restore(line, "[[0]] nur").IsSuccess);
     }
 
     private static LineOutcome Measure(Route route, TokenForm form, string template, Dictionary<string, ILitePairTranslator> translators)

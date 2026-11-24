@@ -55,7 +55,7 @@ public sealed class NameProtectionTests : IDisposable
     {
         var line = TermProtector.Protect($"going to {name} now", source, "de", database);
 
-        Assert.Equal("going to ⟦0⟧ now", line.Text);
+        Assert.Equal("going to [[0]] now", line.Text);
         Assert.Equal([name], line.Items);
         Assert.Equal($"going to {name} now", Translate($"going to {name} now", source, "de"));
     }
@@ -65,7 +65,7 @@ public sealed class NameProtectionTests : IDisposable
     {
         var line = TermProtector.Protect("at jita and NEW EDEN.", "en", "de", database);
 
-        Assert.Equal("at ⟦0⟧ and ⟦1⟧.", line.Text);
+        Assert.Equal("at [[0]] and [[1]].", line.Text);
         Assert.Equal(["jita", "NEW EDEN"], line.Items);
     }
 
@@ -80,7 +80,7 @@ public sealed class NameProtectionTests : IDisposable
     {
         var line = TermProtector.Protect("Jita https://a.b/c 5 Jita,7", "en", "de", database);
 
-        Assert.Equal("⟦1⟧ ⟦0⟧ 5 ⟦2⟧,7", line.Text);
+        Assert.Equal("[[1]] [[0]] 5 [[2]],7", line.Text);
         Assert.Equal(["https://a.b/c", "Jita", "Jita"], line.Items);
         Assert.Equal(["5", "7"], line.DigitSequences);
     }
@@ -90,7 +90,7 @@ public sealed class NameProtectionTests : IDisposable
     {
         var line = TermProtector.Protect("my rifter is fast", "en", "fr", database);
 
-        Assert.Equal("my ⟦0⟧ is fast", line.Text);
+        Assert.Equal("my [[0]] is fast", line.Text);
         Assert.Equal(["Rifteur"], line.Items);
         Assert.Equal("my Rifteur is fast", Translate("my rifter is fast", "en", "fr"));
     }
@@ -107,7 +107,7 @@ public sealed class NameProtectionTests : IDisposable
     {
         var line = TermProtector.Protect("a Rifter Navy Issue and a Rifter", "en", "fr", database);
 
-        Assert.Equal("a ⟦0⟧ and a ⟦1⟧", line.Text);
+        Assert.Equal("a [[0]] and a [[1]]", line.Text);
         Assert.Equal(["Rifteur Marine", "Rifteur"], line.Items);
     }
 
@@ -130,7 +130,7 @@ public sealed class NameProtectionTests : IDisposable
         Assert.Equal("Rifterで攻撃", Translate("リフターで攻撃", "ja", "en"));
         Assert.Equal("ホーク3隻", Translate("ホーク3隻", "ja", "ja"));
         Assert.Equal("ホーク3隻", TermProtector.Protect("ホーク3隻", "ja", "en", database).Text);
-        Assert.Equal("⟦0⟧ pls", TermProtector.Protect("ホーク pls", "ja", "en", database).Text);
+        Assert.Equal("[[0]] pls", TermProtector.Protect("ホーク pls", "ja", "en", database).Text);
     }
 
     [Fact]
@@ -150,7 +150,7 @@ public sealed class NameProtectionTests : IDisposable
     {
         var line = TermProtector.Protect("Rifter in Jita https://a.b 3", "en", "de", database);
 
-        Assert.Equal("⟦1⟧ in ⟦2⟧ ⟦0⟧ 3", line.Text);
+        Assert.Equal("[[1]] in [[2]] [[0]] 3", line.Text);
         Assert.Equal(["https://a.b", "Rifter", "Jita"], line.Items);
     }
 
@@ -159,8 +159,8 @@ public sealed class NameProtectionTests : IDisposable
     {
         var line = TermProtector.Protect("Rifter in Jita", "en", "fr", database);
 
-        Assert.Equal("Rifteur in Jita", TermProtector.Restore(line, "[[0]] in ⟦ 1 ⟧").Text ?? string.Empty);
-        Assert.False(TermProtector.Restore(line, "⟦0⟧ in Jita").IsSuccess);
+        Assert.Equal("Rifteur in Jita", TermProtector.Restore(line, "[[0]] in [[ 1 ]]").Text ?? string.Empty);
+        Assert.False(TermProtector.Restore(line, "[[0]] in Jita").IsSuccess);
     }
 
     [Fact]
@@ -178,16 +178,16 @@ public sealed class NameProtectionTests : IDisposable
     }
 
     [Theory]
-    [InlineData("ja", "アマールで戦う", "⟦0⟧で戦う", "アマール")]
-    [InlineData("ja", "私のアマール", "私の⟦0⟧", "アマール")]
-    [InlineData("ja", "アマール、逃げろ", "⟦0⟧、逃げろ", "アマール")]
-    [InlineData("zh", "我在阿马尔星系很强", "我在⟦0⟧很强", "阿马尔星系")]
-    [InlineData("zh", "阿马尔星系，攻击", "⟦0⟧，攻击", "阿马尔星系")]
-    [InlineData("ko", "我们去아마르별到", "我们去⟦0⟧到", "아마르별")]
-    [InlineData("ja", "ジタ、逃げろ", "⟦0⟧、逃げろ", "ジタ")]
-    [InlineData("zh", "吉他，攻击", "⟦0⟧，攻击", "吉他")]
-    [InlineData("ko", "지타 도착", "⟦0⟧ 도착", "지타")]
-    [InlineData("en", "Jita到了", "⟦0⟧到了", "Jita")]
+    [InlineData("ja", "アマールで戦う", "[[0]]で戦う", "アマール")]
+    [InlineData("ja", "私のアマール", "私の[[0]]", "アマール")]
+    [InlineData("ja", "アマール、逃げろ", "[[0]]、逃げろ", "アマール")]
+    [InlineData("zh", "我在阿马尔星系很强", "我在[[0]]很强", "阿马尔星系")]
+    [InlineData("zh", "阿马尔星系，攻击", "[[0]]，攻击", "阿马尔星系")]
+    [InlineData("ko", "我们去아마르별到", "我们去[[0]]到", "아마르별")]
+    [InlineData("ja", "ジタ、逃げろ", "[[0]]、逃げろ", "ジタ")]
+    [InlineData("zh", "吉他，攻击", "[[0]]，攻击", "吉他")]
+    [InlineData("ko", "지타 도착", "[[0]] 도착", "지타")]
+    [InlineData("en", "Jita到了", "[[0]]到了", "Jita")]
     public void SystemNameGluedToUnspacedScriptTextIsProtectedAndRestoredAsWritten(string source, string text, string protectedText, string name)
     {
         var line = TermProtector.Protect(text, source, "de", database);
@@ -211,7 +211,7 @@ public sealed class NameProtectionTests : IDisposable
     public void NameAtTheMinimumLengthIsProtectedGluedAndBelowItIsNot()
     {
         Assert.Equal(4, NameProtection.MinimumUnspacedLength);
-        Assert.Equal("私の⟦0⟧", TermProtector.Protect("私のアマール", "ja", "de", database).Text);
+        Assert.Equal("私の[[0]]", TermProtector.Protect("私のアマール", "ja", "de", database).Text);
         Assert.Equal("我的吉他", TermProtector.Protect("我的吉他", "zh", "de", database).Text);
     }
 
