@@ -6,6 +6,8 @@ namespace SayWhat.Tests;
 [Collection(SerialMemoryCollection.Name)]
 public sealed class SdeImportTests : IDisposable
 {
+    private const string ChildProcessVariable = "SAYWHAT_SDE_MEMORY_CHILD";
+
     private readonly string directory = Path.Combine(Path.GetTempPath(), "saywhat-sde-" + Guid.NewGuid().ToString("N"));
     private readonly SdeImportOptions small = new() { MinimumShipTypes = 3, MinimumSolarSystems = 3 };
 
@@ -119,6 +121,41 @@ public sealed class SdeImportTests : IDisposable
     [Fact]
     public void Import_StreamsTheTypesTableInBoundedMemory()
     {
+        var executable = Path.Combine(AppContext.BaseDirectory, "SayWhat.Tests.exe");
+        var start = new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = File.Exists(executable) ? executable : "dotnet",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        };
+        if (!File.Exists(executable))
+        {
+            start.ArgumentList.Add(Path.Combine(AppContext.BaseDirectory, "SayWhat.Tests.dll"));
+        }
+
+        start.ArgumentList.Add("-method");
+        start.ArgumentList.Add($"{typeof(SdeImportTests).FullName}.{nameof(Import_StreamsTheTypesTableInBoundedMemory_ChildProcess)}");
+        start.Environment[ChildProcessVariable] = "1";
+
+        using var child = System.Diagnostics.Process.Start(start)!;
+        var output = child.StandardOutput.ReadToEndAsync();
+        var errors = child.StandardError.ReadToEndAsync();
+        var exited = child.WaitForExit(TimeSpan.FromMinutes(2));
+        if (!exited)
+        {
+            child.Kill(entireProcessTree: true);
+        }
+
+        Assert.True(exited, "the measuring child process did not finish in 2 minutes");
+        Assert.True(child.ExitCode == 0, $"child process failed ({child.ExitCode}): {output.Result}{errors.Result}");
+    }
+
+    [Fact]
+    public void Import_StreamsTheTypesTableInBoundedMemory_ChildProcess()
+    {
+        Assert.SkipUnless(Environment.GetEnvironmentVariable(ChildProcessVariable) == "1", "Runs only inside the measuring child process of Import_StreamsTheTypesTableInBoundedMemory.");
+
         const int Lines = 400_000;
         const long GrowthLimitBytes = 40L * 1024 * 1024;
         var sde = SyntheticSde.Create();
