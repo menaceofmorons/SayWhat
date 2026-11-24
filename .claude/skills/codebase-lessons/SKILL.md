@@ -45,6 +45,7 @@ metadata:
 - The Hugging Face API returns 401, not 404, for a repository that does not exist. (WS-1.4)
 - Opus-MT timings vary 5-20x on a busy or OneDrive-synced disk; measure on a quiet machine. (WS-1.4)
 - ONNX Runtime cache dims (heads, head size) come from `InferenceSession.InputMetadata` of `past_key_values.*`. (WS-1.4)
+- `Environment.SpecialFolder.MyDocuments` ignores `USERPROFILE`: to run the host over a temp Documents tree, use `new WindowsEveLogFolder(() => tempRoot)` with `HostRun`, not the `run` command. (WS-1.Integration)
 
 ### Dependencies
 - Inspect a NuGet package without a build: download `https://api.nuget.org/v3-flatcontainer/{id}/{version}/{id}.{version}.nupkg` and open it as a zip. (WS-1.3)
