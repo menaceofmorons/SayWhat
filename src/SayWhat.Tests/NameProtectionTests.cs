@@ -230,16 +230,16 @@ public sealed class NameProtectionTests : IDisposable
     }
 
     [Theory]
-    [InlineData("아마르별에서 만나자", "⟦0⟧에서 만나자", "아마르별")]
-    [InlineData("아마르별에 도착", "⟦0⟧에 도착", "아마르별")]
-    [InlineData("아마르별으로 가자", "⟦0⟧으로 가자", "아마르별")]
-    [InlineData("아마르별는 안전", "⟦0⟧는 안전", "아마르별")]
-    [InlineData("아마르별가 보인다", "⟦0⟧가 보인다", "아마르별")]
+    [InlineData("아마르별에서 만나자", "{0}에서 만나자", "아마르별")]
+    [InlineData("아마르별에 도착", "{0}에 도착", "아마르별")]
+    [InlineData("아마르별으로 가자", "{0}으로 가자", "아마르별")]
+    [InlineData("아마르별는 안전", "{0}는 안전", "아마르별")]
+    [InlineData("아마르별가 보인다", "{0}가 보인다", "아마르별")]
     public void KoreanSystemNameWithParticleIsProtectedAndRestoredWithTheParticle(string text, string protectedText, string name)
     {
         var line = TermProtector.Protect(text, "ko", "de", database);
 
-        Assert.Equal(protectedText, line.Text);
+        Assert.Equal(string.Format(protectedText, TermProtector.FormatToken(0)), line.Text);
         Assert.Equal([name], line.Items);
         Assert.Equal(text, Translate(text, "ko", "de"));
     }
@@ -261,15 +261,15 @@ public sealed class NameProtectionTests : IDisposable
     }
 
     [Theory]
-    [InlineData("Rifter-ko에서 만나자", "⟦0⟧에서 만나자", "Rifter-ko")]
-    [InlineData("Rifter-ko는 빠르다", "⟦0⟧는 빠르다", "Rifter-ko")]
-    [InlineData("Rifter-ko가 왔다", "⟦0⟧가 왔다", "Rifter-ko")]
-    [InlineData("Rifter-ko으로 가자", "⟦0⟧으로 가자", "Rifter-ko")]
+    [InlineData("Rifter-ko에서 만나자", "{0}에서 만나자", "Rifter-ko")]
+    [InlineData("Rifter-ko는 빠르다", "{0}는 빠르다", "Rifter-ko")]
+    [InlineData("Rifter-ko가 왔다", "{0}가 왔다", "Rifter-ko")]
+    [InlineData("Rifter-ko으로 가자", "{0}으로 가자", "Rifter-ko")]
     public void KoreanShipNameWithParticleIsProtectedAndRestoredAsTheTargetNameWithTheParticle(string text, string protectedText, string name)
     {
         var line = TermProtector.Protect(text, "ko", "de", database);
 
-        Assert.Equal(protectedText, line.Text);
+        Assert.Equal(string.Format(protectedText, TermProtector.FormatToken(0)), line.Text);
         Assert.Equal(["Rifter"], line.Items);
         Assert.Equal(text.Replace(name, "Rifter"), Translate(text, "ko", "de"));
     }
