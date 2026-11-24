@@ -52,6 +52,7 @@ internal static class NameProtection
         }
 
         var lookup = names.GetAlternateLookup<ReadOnlySpan<char>>();
+        var koLookup = index.KoreanSystemNames.GetAlternateLookup<ReadOnlySpan<char>>();
         var longest = index.LongestSystemName;
         var builder = new StringBuilder(text.Length);
         var position = 0;
@@ -59,7 +60,7 @@ internal static class NameProtection
         {
             var open = text.IndexOf(TermProtector.TokenOpen, position, StringComparison.Ordinal);
             var segmentEnd = open < 0 ? text.Length : open;
-            ScanSegment(text.AsSpan(position, segmentEnd - position), lookup, longest, minimumUnspacedLength, addItem, builder);
+            ScanSegment(text.AsSpan(position, segmentEnd - position), lookup, koLookup, longest, minimumUnspacedLength, addItem, builder);
             if (open < 0)
             {
                 break;
@@ -74,12 +75,12 @@ internal static class NameProtection
         return builder.ToString();
     }
 
-    private static void ScanSegment(ReadOnlySpan<char> segment, HashSet<string>.AlternateLookup<ReadOnlySpan<char>> lookup, int longest, int minimumUnspacedLength, Func<string, string> addItem, StringBuilder builder)
+    private static void ScanSegment(ReadOnlySpan<char> segment, HashSet<string>.AlternateLookup<ReadOnlySpan<char>> lookup, HashSet<string>.AlternateLookup<ReadOnlySpan<char>> koLookup, int longest, int minimumUnspacedLength, Func<string, string> addItem, StringBuilder builder)
     {
         var i = 0;
         while (i < segment.Length)
         {
-            var length = LongestMatchAt(segment, i, lookup, longest, minimumUnspacedLength);
+            var length = LongestMatchAt(segment, i, lookup, koLookup, longest, minimumUnspacedLength);
             if (length > 0)
             {
                 builder.Append(addItem(segment.Slice(i, length).ToString()));
@@ -93,18 +94,28 @@ internal static class NameProtection
         }
     }
 
-    private static int LongestMatchAt(ReadOnlySpan<char> segment, int start, HashSet<string>.AlternateLookup<ReadOnlySpan<char>> lookup, int longest, int minimumUnspacedLength)
+    private static int LongestMatchAt(ReadOnlySpan<char> segment, int start, HashSet<string>.AlternateLookup<ReadOnlySpan<char>> lookup, HashSet<string>.AlternateLookup<ReadOnlySpan<char>> koLookup, int longest, int minimumUnspacedLength)
     {
         for (var length = Math.Min(longest, segment.Length - start); length > 0; length--)
         {
             var end = start + length;
             Func<char, bool> blocks = length < minimumUnspacedLength ? IsWordChar : IsBoundaryBlocker;
-            if ((start > 0 && blocks(segment[start - 1])) || (end < segment.Length && blocks(segment[end])))
+            if (start > 0 && blocks(segment[start - 1]))
             {
                 continue;
             }
 
-            if (lookup.Contains(segment.Slice(start, length)))
+            var candidate = segment.Slice(start, length);
+            if (end < segment.Length && blocks(segment[end]))
+            {
+                var koreanParticle = length >= minimumUnspacedLength && IsHangul(segment[end]) && !IsNonHangulBlocker(segment[end]);
+                if (!koreanParticle || !koLookup.Contains(candidate))
+                {
+                    continue;
+                }
+            }
+
+            if (lookup.Contains(candidate))
             {
                 return length;
             }
@@ -114,6 +125,10 @@ internal static class NameProtection
     }
 
     private static bool IsBoundaryBlocker(char c) => IsWordChar(c) && !IsUnspacedScript(c);
+
+    private static bool IsHangul(char c) => c is >= 'ᄀ' and <= 'ᇿ' or >= '㄰' and <= '㆏' or >= '가' and <= '힣';
+
+    private static bool IsNonHangulBlocker(char c) => IsWordChar(c) && !IsHangul(c);
 
     private static bool IsUnspacedScript(char c) => c is >= '぀' and <= 'ヿ' or >= '一' and <= '鿿';
 
@@ -131,16 +146,20 @@ internal static class NameProtection
         private readonly Lazy<IReadOnlyList<string>> clientLanguages;
         private readonly Lazy<HashSet<string>> systemNames;
         private readonly Lazy<int> longestSystemName;
+        private readonly Lazy<HashSet<string>> koreanSystemNames;
 
         public NameIndex(ReferenceDatabase reference)
         {
             this.reference = reference;
             clientLanguages = new Lazy<IReadOnlyList<string>>(reference.ClientLanguages);
             systemNames = new Lazy<HashSet<string>>(BuildSystemNames);
+            koreanSystemNames = new Lazy<HashSet<string>>(BuildKoreanSystemNames);
             longestSystemName = new Lazy<int>(() => SystemNames.Count == 0 ? 0 : SystemNames.Max(name => name.Length));
         }
 
         public HashSet<string> SystemNames => systemNames.Value;
+
+        public HashSet<string> KoreanSystemNames => koreanSystemNames.Value;
 
         public int LongestSystemName => longestSystemName.Value;
 
@@ -167,8 +186,13 @@ internal static class NameProtection
             }
 
             var spacedBoundaryOnly = language is "ja" or "zh";
-            return new ShipIndex(new ShipNameMatcher(entries.Select(entry => entry.Name), spacedBoundaryOnly), typeIds);
+            return new ShipIndex(new ShipNameMatcher(entries.Select(entry => entry.Name), spacedBoundaryOnly, hangulMayFollow: language == "ko"), typeIds);
         }
+
+        private HashSet<string> BuildKoreanSystemNames() =>
+            clientLanguages.Value.Contains("ko", StringComparer.Ordinal)
+                ? reference.SystemNames("ko").Select(name => name.Trim()).Where(name => name.Length > 0).ToHashSet(StringComparer.OrdinalIgnoreCase)
+                : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         private HashSet<string> BuildSystemNames()
         {

@@ -1,6 +1,7 @@
 using System.IO.Compression;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using SayWhat.Core.LanguageDetection;
 using SayWhat.Core.ReferenceData;
 using SayWhat.Core.TermProtection;
 
@@ -228,6 +229,68 @@ public sealed class NameProtectionTests : IDisposable
         Assert.Equal(text, TermProtector.Protect(text, source, "de", database).Text);
     }
 
+    [Theory]
+    [InlineData("아마르별에서 만나자", "⟦0⟧에서 만나자", "아마르별")]
+    [InlineData("아마르별에 도착", "⟦0⟧에 도착", "아마르별")]
+    [InlineData("아마르별으로 가자", "⟦0⟧으로 가자", "아마르별")]
+    [InlineData("아마르별는 안전", "⟦0⟧는 안전", "아마르별")]
+    [InlineData("아마르별가 보인다", "⟦0⟧가 보인다", "아마르별")]
+    public void KoreanSystemNameWithParticleIsProtectedAndRestoredWithTheParticle(string text, string protectedText, string name)
+    {
+        var line = TermProtector.Protect(text, "ko", "de", database);
+
+        Assert.Equal(protectedText, line.Text);
+        Assert.Equal([name], line.Items);
+        Assert.Equal(text, Translate(text, "ko", "de"));
+    }
+
+    [Theory]
+    [InlineData("내아마르별에서")]
+    [InlineData("아마르별x")]
+    [InlineData("아마르별3척")]
+    [InlineData("지타에서")]
+    public void KoreanSystemNameAfterHangulOrBeforeALetterOrBelowTheMinimumIsNotProtected(string text)
+    {
+        Assert.Equal(text, TermProtector.Protect(text, "ko", "de", database).Text);
+    }
+
+    [Fact]
+    public void NonKoreanSystemNameBeforeHangulIsNotProtected()
+    {
+        Assert.Equal("Tanoo에서", TermProtector.Protect("Tanoo에서", "en", "de", database).Text);
+    }
+
+    [Theory]
+    [InlineData("Rifter-ko에서 만나자", "⟦0⟧에서 만나자", "Rifter-ko")]
+    [InlineData("Rifter-ko는 빠르다", "⟦0⟧는 빠르다", "Rifter-ko")]
+    [InlineData("Rifter-ko가 왔다", "⟦0⟧가 왔다", "Rifter-ko")]
+    [InlineData("Rifter-ko으로 가자", "⟦0⟧으로 가자", "Rifter-ko")]
+    public void KoreanShipNameWithParticleIsProtectedAndRestoredAsTheTargetNameWithTheParticle(string text, string protectedText, string name)
+    {
+        var line = TermProtector.Protect(text, "ko", "de", database);
+
+        Assert.Equal(protectedText, line.Text);
+        Assert.Equal(["Rifter"], line.Items);
+        Assert.Equal(text.Replace(name, "Rifter"), Translate(text, "ko", "de"));
+    }
+
+    [Theory]
+    [InlineData("내Rifter-ko에서")]
+    [InlineData("Rifter-kox에서")]
+    [InlineData("Rifter-ko3")]
+    public void KoreanShipNameAfterHangulOrBeforeALetterOrDigitIsNotProtected(string text)
+    {
+        Assert.Equal(text, TermProtector.Protect(text, "ko", "de", database).Text);
+    }
+
+    [Fact]
+    public void ShipNameBeforeHangulStaysWholeWordForDetectionAndOtherLanguages()
+    {
+        Assert.Equal("Hawk에서", new ShipNameMatcher(["Hawk"]).Remove("Hawk에서"));
+        Assert.Equal(" 에서", new ShipNameMatcher(["Hawk"], hangulMayFollow: true).Remove("Hawk에서"));
+        Assert.Equal("Hawk에서", TermProtector.Protect("Hawk에서", "en", "de", database).Text);
+    }
+
     [Fact]
     public void MultiWordSystemNameInsideALongerNameIsNotProtected()
     {
@@ -294,7 +357,16 @@ public sealed class NameProtectionTests : IDisposable
         return items;
     }
 
-    private const string NotHangulLetterOrDigit = @"[\p{L}\p{M}\p{Nd}_-[\p{IsHangulSyllables}\p{IsHangulJamo}\p{IsHangulCompatibilityJamo}]]";
+    private static bool Matches(ShipNameMatcher matcher, string text, string? name)
+    {
+        var found = new List<string>();
+        matcher.Replace(text, match =>
+        {
+            found.Add(match);
+            return match;
+        });
+        return name is null ? found.Count > 0 : found.Contains(name, StringComparer.OrdinalIgnoreCase);
+    }
 
     private const string KoParticleSuffixes = "에서|에|으로|는|가";
 
@@ -321,15 +393,22 @@ public sealed class NameProtectionTests : IDisposable
         foreach (var (label, names, excluded) in new[] { ("ship", shipNames, systemSet), ("system", systemNames, shipSet) })
         {
             var baits = allItems.Where(text => !excluded.Contains(text.Trim()) && !names.Contains(text.Trim(), StringComparer.OrdinalIgnoreCase)).ToList();
-            var pool = string.Join("|", names.OrderByDescending(name => name.Length).Select(Regex.Escape));
-            var current = new Regex("(?<!" + AnyLetterOrDigit + ")(?:" + pool + ")(?!" + AnyLetterOrDigit + ")", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-            var hangulAfter = new Regex("(?<!" + AnyLetterOrDigit + ")(?:" + pool + ")(?!" + NotHangulLetterOrDigit + ")", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
             var mentions = names.SelectMany(name => particles.Select(particle => (Name: name, Text: name + particle))).ToList();
-
-            bool Hits(Regex rule, string text, string name) => rule.Matches(text).Any(match => string.Equals(match.Value, name, StringComparison.OrdinalIgnoreCase));
             Report($"KO {label}: {mentions.Count} particle-glued mentions; {baits.Count} bait names");
-            Report($"KO {label} current rule: misses {mentions.Count(mention => !Hits(current, mention.Text, mention.Name))}/{mentions.Count}; false matches {baits.Count(bait => current.IsMatch(bait))}/{baits.Count}");
-            Report($"KO {label} Hangul-after rule: misses {mentions.Count(mention => !Hits(hangulAfter, mention.Text, mention.Name))}/{mentions.Count}; false matches {baits.Count(bait => hangulAfter.IsMatch(bait))}/{baits.Count}");
+            if (label == "ship")
+            {
+                foreach (var (rule, hangulMayFollow) in new[] { ("whole-word matcher", false), ("real rule (Hangul may follow)", true) })
+                {
+                    var matcher = new ShipNameMatcher(names, hangulMayFollow: hangulMayFollow);
+                    Report($"KO ship {rule}: misses {mentions.Count(mention => !Matches(matcher, mention.Text, mention.Name))}/{mentions.Count}; false matches {baits.Count(bait => Matches(matcher, bait, null))}/{baits.Count}");
+                }
+            }
+            else
+            {
+                var misses = mentions.Count(mention => !ProtectedItems(mention.Text, "ko", live, NameProtection.MinimumUnspacedLength).Contains(mention.Name, StringComparer.OrdinalIgnoreCase));
+                var falses = baits.Count(bait => ProtectedItems(bait, "ko", live, NameProtection.MinimumUnspacedLength).Any(systemSet.Contains));
+                Report($"KO system real rule (min {NameProtection.MinimumUnspacedLength}): misses {misses}/{mentions.Count}; false matches {falses}/{baits.Count}");
+            }
         }
 
         Assert.True(shipNames.Count > 0 && systemNames.Count > 0);
