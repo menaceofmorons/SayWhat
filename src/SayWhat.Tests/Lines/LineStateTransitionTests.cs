@@ -11,14 +11,18 @@ public class LineStateTransitionTests
         {
             foreach (var to in Enum.GetValues<LineState>())
             {
-                var allowed = from == LineState.Pending
-                    && (to == LineState.Pending || to == LineState.Translated || to == LineState.Failed);
-                data.Add(from, to, allowed);
+                data.Add(from, to, Allowed.Contains((from, to)));
             }
         }
 
         return data;
     }
+
+    private static readonly HashSet<(LineState, LineState)> Allowed =
+    [
+        (LineState.Pending, LineState.Translated),
+        (LineState.Pending, LineState.Failed),
+    ];
 
     [Theory]
     [MemberData(nameof(Cases))]
