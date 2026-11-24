@@ -3,6 +3,7 @@ using SayWhat.Core.ReferenceData;
 
 namespace SayWhat.Tests;
 
+[Collection(SerialMemoryCollection.Name)]
 public sealed class SdeImportTests : IDisposable
 {
     private readonly string directory = Path.Combine(Path.GetTempPath(), "saywhat-sde-" + Guid.NewGuid().ToString("N"));
