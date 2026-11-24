@@ -23,11 +23,11 @@ public class DetectionFlowIntegrationTests(FastTextModelFixture fixture) : IClas
     {
         using var detector = new FastTextLanguageDetector(fixture.ModelPath);
 
-        var outcome = LanguageDetection.Run(text, Target, detector, translationEnabled: true);
+        var outcome = DetectionRunner.Run(text, Target, detector, translationEnabled: true);
 
         Assert.Equal(DetectionOutcomeKind.Detected, outcome.Kind);
         Assert.Equal(language, outcome.LanguageCode);
-        Assert.InRange(outcome.Confidence, LanguageDetection.DefaultConfidenceCutoff, 1);
+        Assert.InRange(outcome.Confidence, DetectionRunner.DefaultConfidenceCutoff, 1);
     }
 
     [Fact]
@@ -35,7 +35,7 @@ public class DetectionFlowIntegrationTests(FastTextModelFixture fixture) : IClas
     {
         using var detector = new FastTextLanguageDetector(fixture.ModelPath);
 
-        var outcome = LanguageDetection.Run("Is anyone heading to the Jita market tonight, we need more hands for the fleet", Target, detector, translationEnabled: true);
+        var outcome = DetectionRunner.Run("Is anyone heading to the Jita market tonight, we need more hands for the fleet", Target, detector, translationEnabled: true);
 
         Assert.Equal(DetectionOutcomeKind.SameLanguage, outcome.Kind);
         Assert.Equal(Target, outcome.LanguageCode);
@@ -46,7 +46,7 @@ public class DetectionFlowIntegrationTests(FastTextModelFixture fixture) : IClas
     {
         using var detector = new FastTextLanguageDetector(fixture.ModelPath);
 
-        var outcome = LanguageDetection.Run("Wir treffen uns heute Abend am Sammelpunkt", Target, detector, translationEnabled: false);
+        var outcome = DetectionRunner.Run("Wir treffen uns heute Abend am Sammelpunkt", Target, detector, translationEnabled: false);
 
         Assert.Equal(DetectionOutcomeKind.NotRun, outcome.Kind);
         Assert.Null(outcome.LanguageCode);
@@ -57,7 +57,7 @@ public class DetectionFlowIntegrationTests(FastTextModelFixture fixture) : IClas
     {
         using var detector = new FastTextLanguageDetector(fixture.ModelPath);
 
-        var outcome = LanguageDetection.Run(
+        var outcome = DetectionRunner.Run(
             "Wir treffen uns heute Abend am Sammelpunkt https://example.com/fleet 42 1337",
             Target,
             detector,
@@ -72,7 +72,7 @@ public class DetectionFlowIntegrationTests(FastTextModelFixture fixture) : IClas
     {
         using var detector = new FastTextLanguageDetector(fixture.ModelPath);
 
-        var outcome = LanguageDetection.Run("Vargur Rifter 3", Target, detector, translationEnabled: true, DetectionEvaluation.ShipNames);
+        var outcome = DetectionRunner.Run("Vargur Rifter 3", Target, detector, translationEnabled: true, DetectionEvaluation.ShipNames);
 
         Assert.Equal(DetectionOutcomeKind.Unknown, outcome.Kind);
     }
@@ -83,7 +83,7 @@ public class DetectionFlowIntegrationTests(FastTextModelFixture fixture) : IClas
         using var detector = new FastTextLanguageDetector(fixture.ModelPath);
         const string line = "Wir treffen uns heute Abend am Sammelpunkt mit der Vargur und der Rifter";
 
-        var outcome = LanguageDetection.Run(line, Target, detector, translationEnabled: true, DetectionEvaluation.ShipNames);
+        var outcome = DetectionRunner.Run(line, Target, detector, translationEnabled: true, DetectionEvaluation.ShipNames);
 
         Assert.Equal(DetectionOutcomeKind.Detected, outcome.Kind);
         Assert.Equal("de", outcome.LanguageCode);
@@ -94,7 +94,7 @@ public class DetectionFlowIntegrationTests(FastTextModelFixture fixture) : IClas
     {
         using var detector = new FastTextLanguageDetector(fixture.ModelPath);
 
-        var outcome = LanguageDetection.Run(
+        var outcome = DetectionRunner.Run(
             "Wir treffen uns heute Abend am Sammelpunkt",
             Target,
             detector,
@@ -111,7 +111,7 @@ public class DetectionFlowIntegrationTests(FastTextModelFixture fixture) : IClas
     {
         using var detector = new FastTextLanguageDetector(fixture.ModelPath);
 
-        var outcome = LanguageDetection.Run(text, Target, detector, translationEnabled: true);
+        var outcome = DetectionRunner.Run(text, Target, detector, translationEnabled: true);
 
         Assert.Equal(DetectionOutcomeKind.Detected, outcome.Kind);
         Assert.Equal("zh", outcome.LanguageCode);
@@ -122,9 +122,9 @@ public class DetectionFlowIntegrationTests(FastTextModelFixture fixture) : IClas
     {
         using var detector = new FastTextLanguageDetector(MissingModelPath());
 
-        var korean = LanguageDetection.Run("오늘 밤 집결지에서 만나서 함께 출발합시다", Target, detector, translationEnabled: true);
-        var german = LanguageDetection.Run("Wir treffen uns heute Abend am Sammelpunkt", Target, detector, translationEnabled: true);
-        var russian = LanguageDetection.Run("Мы встречаемся сегодня вечером", Target, detector, translationEnabled: true);
+        var korean = DetectionRunner.Run("오늘 밤 집결지에서 만나서 함께 출발합시다", Target, detector, translationEnabled: true);
+        var german = DetectionRunner.Run("Wir treffen uns heute Abend am Sammelpunkt", Target, detector, translationEnabled: true);
+        var russian = DetectionRunner.Run("Мы встречаемся сегодня вечером", Target, detector, translationEnabled: true);
 
         Assert.False(detector.IsReady);
         Assert.Equal("ko", korean.LanguageCode);
@@ -140,7 +140,7 @@ public class DetectionFlowIntegrationTests(FastTextModelFixture fixture) : IClas
 
         foreach (var line in lines)
         {
-            var outcome = LanguageDetection.Run(line.Text, Target, detector, translationEnabled: true, DetectionEvaluation.ShipNames);
+            var outcome = DetectionRunner.Run(line.Text, Target, detector, translationEnabled: true, DetectionEvaluation.ShipNames);
 
             Assert.NotEqual(DetectionOutcomeKind.NotRun, outcome.Kind);
             Assert.InRange(outcome.Confidence, 0, 1);
@@ -153,7 +153,7 @@ public class DetectionFlowIntegrationTests(FastTextModelFixture fixture) : IClas
 
             Assert.False(string.IsNullOrEmpty(outcome.LanguageCode));
             Assert.True(
-                outcome.Confidence >= LanguageDetection.DefaultConfidenceCutoff,
+                outcome.Confidence >= DetectionRunner.DefaultConfidenceCutoff,
                 $"'{line.Text}' returned {outcome.LanguageCode} at {outcome.Confidence}");
             Assert.Equal(
                 string.Equals(outcome.LanguageCode, Target, StringComparison.OrdinalIgnoreCase),
@@ -169,7 +169,7 @@ public class DetectionFlowIntegrationTests(FastTextModelFixture fixture) : IClas
 
         var codes = Enumerable.Range(0, 32)
             .AsParallel()
-            .Select(_ => LanguageDetection.Run(line, Target, detector, translationEnabled: true).LanguageCode)
+            .Select(_ => DetectionRunner.Run(line, Target, detector, translationEnabled: true).LanguageCode)
             .ToList();
 
         Assert.All(codes, code => Assert.Equal("fr", code));

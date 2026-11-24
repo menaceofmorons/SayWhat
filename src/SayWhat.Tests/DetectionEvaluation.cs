@@ -53,7 +53,7 @@ public static class DetectionEvaluation
         var report = new StringBuilder();
         foreach (var (name, rows) in new[] { ("synthetic", synthetic), ("real", real) })
         {
-            report.AppendLine($"## {name} lines (target language {TargetLanguage}, cutoff {LanguageDetection.DefaultConfidenceCutoff.ToString(CultureInfo.InvariantCulture)})");
+            report.AppendLine($"## {name} lines (target language {TargetLanguage}, cutoff {DetectionRunner.DefaultConfidenceCutoff.ToString(CultureInfo.InvariantCulture)})");
             Accuracy(report, rows);
         }
 
@@ -65,8 +65,8 @@ public static class DetectionEvaluation
 
     private static EvaluationRow Evaluate(ILanguageDetector detector, EvaluationLine line)
     {
-        var without = LanguageDetection.Run(line.Text, TargetLanguage, detector, true);
-        var with = LanguageDetection.Run(line.Text, TargetLanguage, detector, true, ShipNames);
+        var without = DetectionRunner.Run(line.Text, TargetLanguage, detector, true);
+        var with = DetectionRunner.Run(line.Text, TargetLanguage, detector, true, ShipNames);
         var setAside = SetAside.Apply(line.Text, ShipNames);
         var script = ScriptCheck.Check(setAside.Text);
         var raw = !setAside.HasNoLetters && detector.IsReady ? detector.Detect(setAside.Text) : null;

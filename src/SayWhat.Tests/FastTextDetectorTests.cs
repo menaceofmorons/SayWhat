@@ -66,7 +66,7 @@ public class FastTextDetectorTests(FastTextModelFixture fixture) : IClassFixture
         var result = detector.Detect(text);
 
         Assert.Equal(language, result.LanguageCode);
-        Assert.True(result.Confidence >= LanguageDetection.DefaultConfidenceCutoff);
+        Assert.True(result.Confidence >= DetectionRunner.DefaultConfidenceCutoff);
         Assert.InRange(result.Confidence, 0, 1);
         Assert.Equal(script, result.DominantScript);
     }

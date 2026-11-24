@@ -59,7 +59,7 @@ public class DetectionAccuracyTests(FastTextModelFixture fixture) : IClassFixtur
         foreach (var row in rows)
         {
             Assert.True(row.IsCorrect(row.With), $"{row.Line.Label}: {row.Line.Text}");
-            Assert.True(row.With.Confidence >= LanguageDetection.DefaultConfidenceCutoff, row.Line.Text);
+            Assert.True(row.With.Confidence >= DetectionRunner.DefaultConfidenceCutoff, row.Line.Text);
         }
     }
 
@@ -77,7 +77,7 @@ public class DetectionAccuracyTests(FastTextModelFixture fixture) : IClassFixtur
                 continue;
             }
 
-            var outcome = LanguageDetection.Run(line.Text, DetectionEvaluation.TargetLanguage, detector, true, DetectionEvaluation.ShipNames, confidenceCutoff: 1.01);
+            var outcome = DetectionRunner.Run(line.Text, DetectionEvaluation.TargetLanguage, detector, true, DetectionEvaluation.ShipNames, confidenceCutoff: 1.01);
 
             Assert.Equal(DetectionOutcomeKind.Unknown, outcome.Kind);
         }
@@ -90,7 +90,7 @@ public class DetectionAccuracyTests(FastTextModelFixture fixture) : IClassFixtur
 
         foreach (var line in DetectionEvaluation.Synthetic().Where(line => line.Category == "ship"))
         {
-            LanguageDetection.Run(line.Text, "xx", detector, true, DetectionEvaluation.ShipNames);
+            DetectionRunner.Run(line.Text, "xx", detector, true, DetectionEvaluation.ShipNames);
         }
 
         Assert.NotEmpty(detector.Inputs);
@@ -108,7 +108,7 @@ public class DetectionAccuracyTests(FastTextModelFixture fixture) : IClassFixtur
     {
         var detector = new RecordingDetector("en", 0.9);
 
-        var outcome = LanguageDetection.Run("Rifter Megathron", "xx", detector, true, DetectionEvaluation.ShipNames);
+        var outcome = DetectionRunner.Run("Rifter Megathron", "xx", detector, true, DetectionEvaluation.ShipNames);
 
         Assert.Equal(DetectionOutcomeKind.Unknown, outcome.Kind);
         Assert.Empty(detector.Inputs);
